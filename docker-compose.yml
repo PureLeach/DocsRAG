@@ -1,0 +1,43 @@
+# DocsRAG infrastructure stack
+#
+# Setup mode: NATIVE OLLAMA (Variant A)
+# Ollama runs natively on the host via `brew install ollama` to use Metal GPU acceleration.
+# Services in this compose file reach Ollama at http://host.docker.internal:11434
+#
+# To switch to FULL DOCKER mode (Variant B), uncomment the `ollama` service below
+# and change OLLAMA_BASE_URL in API service (added in Task 3) to http://ollama:11434.
+# Variant B is slower on Mac (CPU-only inside Docker on Apple Silicon)
+# but provides single-command startup for demos.
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: docsrag-qdrant
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC API
+    volumes:
+      - ./qdrant_storage:/qdrant/storage
+    environment:
+      - QDRANT__LOG_LEVEL=INFO
+    restart: unless-stopped
+
+  # === Variant B: Ollama in Docker ===
+  # Uncomment if you want to run Ollama inside Docker instead of natively.
+  # WARNING: On Apple Silicon, Docker Ollama runs CPU-only and is 5-10x slower.
+  #
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: docsrag-ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ./ollama_data:/root/.ollama
+  #   environment:
+  #     - OLLAMA_KEEP_ALIVE=24h
+  #     - OLLAMA_HOST=0.0.0.0
+  #   restart: unless-stopped
+
+networks:
+  default:
+    name: docsrag-network
