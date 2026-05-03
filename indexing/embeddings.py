@@ -1,0 +1,64 @@
+"""Sentence-transformer embeddings wrapper.
+
+Uses BAAI/bge-small-en-v1.5 — small (~130MB), fast, and competitive
+on retrieval benchmarks (MTEB).
+
+The model is loaded once and reused. On Apple Silicon, sentence-transformers
+will automatically use MPS (Metal) backend if available.
+"""
+
+from collections.abc import Sequence
+
+import torch
+from loguru import logger
+from sentence_transformers import SentenceTransformer
+
+
+class EmbeddingModel:
+    """Thin wrapper around SentenceTransformer with batched encoding."""
+
+    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5") -> None:
+        device = self._select_device()
+        logger.info(f"Loading embedding model '{model_name}' on device '{device}'")
+        self._model = SentenceTransformer(model_name, device=device)
+        self.model_name = model_name
+        self.dimension = self._model.get_embedding_dimension()
+        logger.info(f"Embedding dimension: {self.dimension}")
+
+    @staticmethod
+    def _select_device() -> str:
+        """Select best available device: MPS (Apple Silicon) > CUDA > CPU."""
+        if torch.backends.mps.is_available():
+            return "mps"
+        if torch.cuda.is_available():
+            return "cuda"
+        return "cpu"
+
+    def encode(
+        self,
+        texts: Sequence[str],
+        batch_size: int = 32,
+        show_progress: bool = True,
+    ) -> list[list[float]]:
+        """Encode texts into dense embedding vectors.
+
+        Args:
+            texts: List of texts to embed.
+            batch_size: Number of texts per forward pass. 32 is a good default for
+                        small models on M-series Macs.
+            show_progress: Show tqdm bar (useful for long indexing jobs).
+
+        Returns:
+            List of embedding vectors (each is a list of floats).
+        """
+        if not texts:
+            return []
+
+        embeddings = self._model.encode(
+            list(texts),
+            batch_size=batch_size,
+            show_progress_bar=show_progress,
+            convert_to_numpy=True,
+            normalize_embeddings=True,  # critical for cosine similarity
+        )
+        return embeddings.tolist()
