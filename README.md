@@ -54,10 +54,26 @@ docsrag/
 └── docker-compose.yml
 ```
 
+## Indexing Documentation
+
+```bash
+# Fetch FastAPI docs (one-time, ~5MB)
+make fetch-docs
+
+# Start Qdrant
+make up
+
+# Index documents into Qdrant
+make index
+
+# Smoke test
+make smoke
+```
+
 ## Roadmap
 
 - [x] Task 1: Infrastructure setup
-- [ ] Task 2: Indexing pipeline
+- [x] Task 2: Indexing pipeline
 - [ ] Task 3: Basic RAG API (MVP)
 - [ ] Task 4: Evaluation framework (Ragas + MLflow)
 - [ ] Task 5: Hybrid search + reranker
