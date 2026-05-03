@@ -1,1 +1,19 @@
+# Project specific
+.venv/
+.env
+*.log
+data/
+qdrant_storage/
+ollama_data/
+mlruns/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
 .DS_Store
