@@ -73,7 +73,7 @@ make smoke
 ## Roadmap
 
 - [x] Task 1: Infrastructure setup
-- [x] Task 2: Indexing pipeline
+- [x] Task 2: Indexing pipeline (Ollama + Qdrant)
 - [ ] Task 3: Basic RAG API (MVP)
 - [ ] Task 4: Evaluation framework (Ragas + MLflow)
 - [ ] Task 5: Hybrid search + reranker
