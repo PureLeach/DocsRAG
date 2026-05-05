@@ -7,12 +7,11 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
 from langchain_core.output_parsers import StrOutputParser
 from langchain_ollama import ChatOllama
-from langchain_qdrant import QdrantVectorStore
 from loguru import logger
 from qdrant_client import QdrantClient
+from qdrant_client.models import ScoredPoint
 
 from api.config import settings
 from api.prompts import PROMPT
@@ -26,26 +25,6 @@ class RetrievalHit:
 
     document: Document
     score: float
-
-
-class LangchainEmbeddingsAdapter(Embeddings):
-    """Adapt our EmbeddingModel to the LangChain Embeddings interface.
-
-    LangChain's QdrantVectorStore expects an object with `embed_query` and
-    `embed_documents` methods. Our indexing-side embedder is framework-agnostic
-    (only exposes `.encode(list[str]) -> list[list[float]]`), so we wrap it
-    here rather than coupling the indexing code to LangChain.
-    """
-
-    def __init__(self, model: EmbeddingModel) -> None:
-        self._model = model
-
-    def embed_query(self, text: str) -> list[float]:
-        # encode() expects a sequence; take the single result back out.
-        return self._model.encode([text], show_progress=False)[0]
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return self._model.encode(texts, show_progress=False)
 
 
 class RAGPipeline:
@@ -62,18 +41,11 @@ class RAGPipeline:
         # Embedder: same model used during indexing — guarantees identical
         # vector space and pooling/normalization between index- and query-time.
         self._embedder = EmbeddingModel(model_name=settings.embedding_model)
-        self._lc_embeddings = LangchainEmbeddingsAdapter(self._embedder)
 
-        # Qdrant: one client, one vector store handle.
-        # NOTE: our indexing pipeline stores chunk text under the `text` payload key.
-        # langchain-qdrant defaults to `page_content`, so we override it explicitly.
+        # Qdrant: direct client — bypasses langchain-qdrant metadata handling
+        # which changed in 0.2.x. Our payload is flat: text, source_path,
+        # header_path, chunk_index — we map it to Document ourselves.
         self._qdrant_client = QdrantClient(url=settings.qdrant_url)
-        self._vector_store = QdrantVectorStore(
-            client=self._qdrant_client,
-            collection_name=settings.qdrant_collection,
-            embedding=self._lc_embeddings,
-            content_payload_key="text",
-        )
 
         # LLM: ChatOllama hits OLLAMA_BASE_URL.
         # Variant A (current): host.docker.internal:11434 from container,
@@ -99,10 +71,14 @@ class RAGPipeline:
 
     def retrieve(self, query: str, top_k: int) -> list[RetrievalHit]:
         """Vector-search the Qdrant collection."""
-        results = self._vector_store.similarity_search_with_score(
-            query=query, k=top_k
+        query_vector = self._embedder.encode([query], show_progress=False)[0]
+        results: list[ScoredPoint] = self._qdrant_client.search(
+            collection_name=settings.qdrant_collection,
+            query_vector=query_vector,
+            limit=top_k,
+            with_payload=True,
         )
-        hits = [RetrievalHit(document=doc, score=float(score)) for doc, score in results]
+        hits = [self._scored_point_to_hit(r) for r in results]
         logger.debug(
             "Retrieved {} hits for query={!r} (top_score={:.3f})",
             len(hits),
@@ -110,6 +86,19 @@ class RAGPipeline:
             hits[0].score if hits else 0.0,
         )
         return hits
+
+    @staticmethod
+    def _scored_point_to_hit(point: ScoredPoint) -> RetrievalHit:
+        payload = point.payload or {}
+        doc = Document(
+            page_content=str(payload.get("text", "")),
+            metadata={
+                "source_path": payload.get("source_path", "unknown"),
+                "header_path": payload.get("header_path", ""),
+                "chunk_index": payload.get("chunk_index", -1),
+            },
+        )
+        return RetrievalHit(document=doc, score=float(point.score))
 
     def generate(self, question: str, hits: list[RetrievalHit]) -> str:
         """Build the prompt from retrieved chunks and call the LLM."""
