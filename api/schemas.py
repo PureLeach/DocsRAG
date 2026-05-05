@@ -1,0 +1,73 @@
+"""Pydantic schemas for the RAG API contract."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+
+class Source(BaseModel):
+    """A single source chunk used to answer the question."""
+
+    source_path: str = Field(
+        ...,
+        description="Relative path to the source markdown file",
+        examples=["tutorial/path-params.md"],
+    )
+    header_path: str = Field(
+        default="",
+        description="Hierarchical markdown headers leading to the chunk",
+        examples=["Path Parameters > Path parameters with types"],
+    )
+    score: float = Field(
+        ...,
+        description="Cosine similarity score from the vector store (higher is better)",
+        ge=0.0,
+        le=1.0,
+    )
+    content: str | None = Field(
+        default=None,
+        description="Raw chunk text. Populated only when include_contexts=True.",
+    )
+
+
+class AskRequest(BaseModel):
+    """Incoming question payload."""
+
+    question: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+        description="Natural-language question about the indexed documentation",
+        examples=["How do I define a path parameter in FastAPI?"],
+    )
+    top_k: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Number of chunks to retrieve from the vector store",
+    )
+    include_contexts: bool = Field(
+        default=False,
+        description="If true, returns raw chunk texts in `sources[].content` for debugging",
+    )
+
+
+class AskResponse(BaseModel):
+    """RAG answer with attribution."""
+
+    question: str
+    answer: str
+    sources: list[Source]
+    retrieval_ms: int = Field(..., description="Retrieval latency in milliseconds")
+    generation_ms: int = Field(..., description="LLM generation latency in milliseconds")
+    total_ms: int = Field(..., description="End-to-end latency in milliseconds")
+
+
+class HealthResponse(BaseModel):
+    """Health check response."""
+
+    status: str = Field(default="ok")
+    qdrant_collection: str
+    qdrant_points: int
+    ollama_model: str
+    embedding_model: str
