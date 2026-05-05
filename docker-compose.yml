@@ -17,27 +17,72 @@ services:
       - "6333:6333"   # REST API
       - "6334:6334"   # gRPC API
     volumes:
-      - ./qdrant_storage:/qdrant/storage
+      # - ./qdrant_storage:/qdrant/storage
+      - qdrant_storage:/qdrant/storage
     environment:
       - QDRANT__LOG_LEVEL=INFO
     restart: unless-stopped
+    healthcheck:
+      # /healthz is plain HTTP 200 with no body — works with default slim image
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/6333 && echo -e 'GET /healthz HTTP/1.0\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q 200"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
-  # === Variant B: Ollama in Docker ===
-  # Uncomment if you want to run Ollama inside Docker instead of natively.
-  # WARNING: On Apple Silicon, Docker Ollama runs CPU-only and is 5-10x slower.
-  #
+  # ===== Variant B (Ollama in Docker) — uncomment to switch =====
   # ollama:
   #   image: ollama/ollama:latest
   #   container_name: docsrag-ollama
   #   ports:
   #     - "11434:11434"
   #   volumes:
-  #     - ./ollama_data:/root/.ollama
-  #   environment:
-  #     - OLLAMA_KEEP_ALIVE=24h
-  #     - OLLAMA_HOST=0.0.0.0
+  #     - ollama_data:/root/.ollama
   #   restart: unless-stopped
+  # If you enable this:
+  #   1. Set OLLAMA_BASE_URL: "http://ollama:11434" in api.environment
+  #   2. Remove the extra_hosts block from api
+  #   3. Add `ollama` to api.depends_on
+  #   4. After first start: docker exec -it docsrag-ollama ollama pull qwen2.5:7b-instruct-q4_K_M
+
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: docsrag-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Qdrant lives in this compose network — use the service name.
+      QDRANT_URL: "http://qdrant:6333"
+      QDRANT_COLLECTION: "docsrag"
+      # Variant A: Ollama runs natively on the host. From the container,
+      # we reach it via host.docker.internal (mapped below in extra_hosts).
+      # Variant B (Ollama in Docker): change to http://ollama:11434
+      OLLAMA_BASE_URL: "http://host.docker.internal:11434"
+      OLLAMA_MODEL: "qwen2.5:7b-instruct-q4_K_M"
+      EMBEDDING_MODEL: "BAAI/bge-small-en-v1.5"
+      EMBEDDING_DIM: "384"
+      HF_TOKEN: "${HF_TOKEN}"
+    extra_hosts:
+      # Required on Linux for host.docker.internal to resolve.
+      # On Docker Desktop (macOS) it's already mapped, but specifying it
+      # explicitly makes the compose file portable. Harmless on macOS.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Persist HuggingFace model cache so we don't redownload bge-small
+      # on every container rebuild.
+      - hf_cache:/app/.cache/huggingface
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    restart: unless-stopped
 
 networks:
   default:
     name: docsrag-network
+
+volumes:
+  qdrant_storage:
+  hf_cache:
+  # ollama_data:  # uncomment for Variant B
