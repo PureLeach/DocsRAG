@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     # LangFuse tracing (optional — leave empty to disable)
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
-    langfuse_host: str = "https://cloud.langfuse.com"
+    langfuse_base_url: str = "https://cloud.langfuse.com"
 
 
 settings = Settings()
