@@ -2,7 +2,8 @@
         lint format type-check test \
         fetch-docs index reindex smoke \
         build rebuild api-logs api-shell health ask warmup \
-        eval mlflow-ui prometheus-ui grafana-ui clean
+        eval mlflow-ui prometheus-ui grafana-ui \
+        vllm-start vllm-status clean
 
 # Default question for `make ask` if Q is not provided
 Q ?= How do I define a path parameter in FastAPI?
@@ -22,6 +23,8 @@ help:
 	@echo "    make api-logs      - Tail logs of the API service only"
 	@echo "    make api-shell     - Open a shell inside the running API container"
 	@echo "    make ollama-status - Check Ollama status (native install)"
+	@echo "    make vllm-start    - Start vllm-metal server (VLLM_MODEL / VLLM_PORT overridable)"
+	@echo "    make vllm-status   - Check vllm-metal status"
 	@echo ""
 	@echo "  RAG API:"
 	@echo "    make health        - GET /health"
@@ -80,6 +83,15 @@ api-shell:
 
 ollama-status:
 	@curl -sf http://localhost:11434/api/tags > /dev/null && echo "✓ Ollama API responding" || echo "✗ Ollama API not responding — start the Ollama app or run 'ollama serve'"
+
+VLLM_MODEL ?= mlx-community/Qwen2.5-7B-Instruct-4bit
+VLLM_PORT  ?= 8001
+
+vllm-start:
+	vllm-metal --model $(VLLM_MODEL) --host 127.0.0.1 --port $(VLLM_PORT)
+
+vllm-status:
+	@curl -sf http://127.0.0.1:$(VLLM_PORT)/v1/models > /dev/null && echo "✓ vllm-metal responding on port $(VLLM_PORT)" || echo "✗ vllm-metal not running — run 'make vllm-start'"
 
 # RAG API
 
