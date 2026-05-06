@@ -1,0 +1,102 @@
+[
+  {
+    "question": "How do you define a path parameter in FastAPI?",
+    "ground_truth": "Path parameters are declared using curly braces in the path string and as function arguments with the same name. For example: @app.get('/items/{item_id}') with async def read_item(item_id: int). FastAPI automatically parses and validates the value."
+  },
+  {
+    "question": "How does FastAPI validate path parameter types?",
+    "ground_truth": "FastAPI uses Python type annotations to validate path parameters. If you declare item_id: int and the client sends a non-integer value, FastAPI returns an HTTP 422 error with a detailed validation message. The conversion from URL string to the declared type is automatic."
+  },
+  {
+    "question": "How do you define predefined allowed values for a path parameter using an Enum?",
+    "ground_truth": "Create a class that inherits from str and Enum, define the allowed values as class attributes, then declare the path parameter with that Enum type. FastAPI will validate the input and show the valid values in the auto-generated docs."
+  },
+  {
+    "question": "What are query parameters in FastAPI and how are they declared?",
+    "ground_truth": "Query parameters are function parameters that are not part of the path. They appear after ? in the URL as key=value pairs. Declare them as regular function arguments: def read_items(skip: int = 0, limit: int = 10). FastAPI automatically interprets them as query parameters."
+  },
+  {
+    "question": "How do you make a query parameter optional in FastAPI?",
+    "ground_truth": "Give the parameter a default value, typically None with an Optional type hint: def read_item(q: str | None = None). If the client omits the parameter, the function receives None. Parameters without default values are required."
+  },
+  {
+    "question": "How do you declare a request body in FastAPI?",
+    "ground_truth": "Define a Pydantic model class inheriting from BaseModel, then declare a function parameter with that model type. FastAPI reads the request body as JSON, validates it against the model, and passes the model instance to the function."
+  },
+  {
+    "question": "What does the response_model parameter do in FastAPI?",
+    "ground_truth": "response_model declares the Pydantic model used to serialize and filter the response. FastAPI validates the returned data against the model, removes fields not in the model (useful for hiding sensitive fields like passwords), and generates accurate OpenAPI response schema."
+  },
+  {
+    "question": "How do you return an HTTP error response in FastAPI?",
+    "ground_truth": "Raise an HTTPException with the desired status_code and a detail message: raise HTTPException(status_code=404, detail='Item not found'). FastAPI converts it to a JSON error response. You can also add custom headers via the headers parameter."
+  },
+  {
+    "question": "How does dependency injection work in FastAPI?",
+    "ground_truth": "Define a dependency as a regular function that declares its own parameters. Use Depends(dependency_function) as a parameter default in the path operation function. FastAPI calls the dependency, resolves its parameters the same way as path operation parameters, and injects the result."
+  },
+  {
+    "question": "How do you handle file uploads in FastAPI?",
+    "ground_truth": "Import File and UploadFile from fastapi. Declare a parameter as file: UploadFile. UploadFile provides access to filename, content_type, and an async read() method. For small files you can use bytes type instead, but UploadFile is preferred for large files as it uses spooled storage."
+  },
+  {
+    "question": "How do you run a background task after returning a response in FastAPI?",
+    "ground_truth": "Import BackgroundTasks and declare it as a parameter in your path operation function. Call background_tasks.add_task(func, *args, **kwargs) to register a task. FastAPI will return the response to the client first and then run the task in the background."
+  },
+  {
+    "question": "How do you add middleware to a FastAPI application?",
+    "ground_truth": "Use the @app.middleware('http') decorator on an async function that accepts request and call_next. The function can modify the request, call await call_next(request) to get the response, modify the response, and return it. All requests pass through every middleware."
+  },
+  {
+    "question": "How do you enable CORS in FastAPI?",
+    "ground_truth": "Add CORSMiddleware from fastapi.middleware.cors using app.add_middleware(). Configure allow_origins (list of allowed origins or ['*']), allow_methods, allow_headers, and optionally allow_credentials. This must be added before other middleware."
+  },
+  {
+    "question": "How do you read cookie parameters in FastAPI?",
+    "ground_truth": "Import Cookie from fastapi and declare the parameter with Cookie() as the default: def read_items(session: str | None = Cookie(default=None)). FastAPI extracts the value from the request cookies and validates it."
+  },
+  {
+    "question": "How do you read custom HTTP headers in FastAPI?",
+    "ground_truth": "Import Header from fastapi and declare the parameter: def read_items(x_token: str | None = Header(default=None)). FastAPI automatically converts underscores to hyphens, so x_token reads the X-Token header. Duplicate headers are returned as a list."
+  },
+  {
+    "question": "How do you receive form data in FastAPI?",
+    "ground_truth": "Import Form from fastapi and declare parameters with Form() as default: def login(username: str = Form(), password: str = Form()). Install python-multipart first. Form data is encoded as application/x-www-form-urlencoded, not JSON."
+  },
+  {
+    "question": "How do you add numeric validation constraints to path parameters in FastAPI?",
+    "ground_truth": "Use Path() from fastapi with ge, gt, le, lt parameters: def read_item(item_id: int = Path(ge=1)). This makes item_id required to be >= 1. FastAPI validates the value and returns 422 if the constraint is violated."
+  },
+  {
+    "question": "How do you add string validation to query parameters in FastAPI?",
+    "ground_truth": "Use Query() from fastapi with min_length, max_length, and pattern parameters: def read_items(q: str | None = Query(default=None, min_length=3, max_length=50)). FastAPI validates and returns 422 on violation."
+  },
+  {
+    "question": "How do you set a custom HTTP status code for a response in FastAPI?",
+    "ground_truth": "Use the status_code parameter in the path operation decorator: @app.post('/items/', status_code=201). You can use integer values or constants from fastapi import status, e.g. status.HTTP_201_CREATED for readability."
+  },
+  {
+    "question": "How do you add tags, a summary, and a description to a path operation in FastAPI?",
+    "ground_truth": "Use the tags, summary, and description parameters in the decorator: @app.get('/items/', tags=['items'], summary='List items', description='...'). Tags group operations in the OpenAPI UI. The docstring of the function is also used as description if the parameter is not set."
+  },
+  {
+    "question": "How do you structure a larger FastAPI application with multiple files using APIRouter?",
+    "ground_truth": "Create an APIRouter instance in each module: router = APIRouter(). Define path operations on router instead of app. In the main app file, include the router: app.include_router(router, prefix='/items', tags=['items']). This keeps related routes together without one giant file."
+  },
+  {
+    "question": "How do you serve static files in FastAPI?",
+    "ground_truth": "Mount StaticFiles from starlette.staticfiles: app.mount('/static', StaticFiles(directory='static'), name='static'). Install aiofiles first. Files in the static/ directory are then served at the /static/ URL prefix."
+  },
+  {
+    "question": "How do you manage application settings from environment variables in FastAPI?",
+    "ground_truth": "Create a Settings class inheriting from pydantic_settings.BaseSettings. Declare fields with type annotations; Pydantic reads values from environment variables with matching names (case-insensitive). Use lru_cache to create a singleton: @lru_cache def get_settings(): return Settings()."
+  },
+  {
+    "question": "When should you use async def vs def for path operation functions in FastAPI?",
+    "ground_truth": "Use async def when the function calls async libraries (e.g. async database clients, httpx). Use regular def when calling blocking I/O (e.g. requests, synchronous DB). FastAPI runs regular def functions in a thread pool to avoid blocking the event loop. Don't use async def with blocking calls."
+  },
+  {
+    "question": "How do you implement OAuth2 password bearer authentication in FastAPI?",
+    "ground_truth": "Use OAuth2PasswordBearer from fastapi.security: oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token'). Declare it as a dependency: token: str = Depends(oauth2_scheme). FastAPI extracts the Bearer token from the Authorization header. Create a /token endpoint accepting OAuth2PasswordRequestForm to issue tokens."
+  }
+]
