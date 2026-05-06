@@ -127,10 +127,11 @@ class RAGPipeline:
         )
         return hits
 
-    def generate(self, question: str, hits: list[RetrievalHit]) -> str:
+    def generate(self, question: str, hits: list[RetrievalHit], callbacks: list | None = None) -> str:
         """Build the prompt from retrieved chunks and call the LLM."""
         context = self._format_context(hits)
-        answer = self._chain.invoke({"context": context, "question": question})
+        invoke_config = {"callbacks": callbacks} if callbacks else {}
+        answer = self._chain.invoke({"context": context, "question": question}, config=invoke_config)
         return answer.strip()
 
     def ask(
@@ -141,10 +142,14 @@ class RAGPipeline:
         rerank_top_n: int = 20,
     ) -> tuple[str, list[Source], dict[str, int]]:
         """Full pipeline: retrieve → generate. Returns answer, sources, timings."""
+        from api.tracing import get_langfuse_handler
+        handler = get_langfuse_handler(question)
+        callbacks = [handler] if handler else None
+
         t0 = time.perf_counter()
         hits = self.retrieve(question, top_k=top_k, rerank_top_n=rerank_top_n)
         t1 = time.perf_counter()
-        answer = self.generate(question, hits)
+        answer = self.generate(question, hits, callbacks=callbacks)
         t2 = time.perf_counter()
 
         sources = [self._hit_to_source(h, include_contexts) for h in hits]

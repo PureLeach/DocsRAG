@@ -40,10 +40,15 @@ class Settings(BaseSettings):
     chunk_size: int = 1024
     chunk_overlap: int = 100
 
-    # Document source 
+    # Document source
     docs_source_path: Path = Field(
         default_factory=lambda: Path("data/raw/fastapi/docs/en/docs")
     )
+
+    # LangFuse tracing (optional — leave empty to disable)
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_host: str = "https://cloud.langfuse.com"
 
 
 settings = Settings()

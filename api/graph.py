@@ -50,6 +50,7 @@ class GraphState(TypedDict):
     sources: list         # list[Source]
     retry_count: int      # incremented by relevance_grader each pass
     timings: dict         # rewrite_ms, retrieval_ms, grading_ms, generation_ms, total_ms
+    callbacks: list       # LangFuse CallbackHandler list, empty when tracing disabled
 
 
 def build_agent_graph(pipeline: "RAGPipeline"):
@@ -87,8 +88,9 @@ def build_agent_graph(pipeline: "RAGPipeline"):
                 f"Previous query: {state.get('query', question)}"
             )
 
+        callbacks = state.get("callbacks") or []
         t0 = time.perf_counter()
-        response = llm.invoke([HumanMessage(content=prompt)])
+        response = llm.invoke([HumanMessage(content=prompt)], config={"callbacks": callbacks})
         rewrite_ms = int((time.perf_counter() - t0) * 1000)
 
         query = str(response.content).strip()
@@ -113,6 +115,7 @@ def build_agent_graph(pipeline: "RAGPipeline"):
         query = state["query"]
         hits = state["hits"]
 
+        callbacks = state.get("callbacks") or []
         t0 = time.perf_counter()
         relevant_hits = []
         for hit in hits:
@@ -123,7 +126,7 @@ def build_agent_graph(pipeline: "RAGPipeline"):
                 'Respond with JSON: {"relevant": true or false}'
             )
             try:
-                response = grader_llm.invoke([HumanMessage(content=prompt)])
+                response = grader_llm.invoke([HumanMessage(content=prompt)], config={"callbacks": callbacks})
                 if json.loads(str(response.content)).get("relevant", False):
                     relevant_hits.append(hit)
             except Exception as exc:
@@ -150,8 +153,9 @@ def build_agent_graph(pipeline: "RAGPipeline"):
         # Fall back to all hits if grading produced nothing relevant.
         hits_for_gen = state.get("relevant_hits") or state["hits"]
 
+        callbacks = state.get("callbacks") or []
         t0 = time.perf_counter()
-        answer = pipeline.generate(question, hits_for_gen)
+        answer = pipeline.generate(question, hits_for_gen, callbacks=callbacks or None)
         generation_ms = int((time.perf_counter() - t0) * 1000)
 
         sources = [pipeline._hit_to_source(h, include_contexts=False) for h in hits_for_gen]
@@ -214,6 +218,9 @@ class AgentPipeline:
         include_contexts: bool,
         rerank_top_n: int = 20,
     ) -> tuple[str, list["Source"], dict[str, int]]:
+        from api.tracing import get_langfuse_handler
+        handler = get_langfuse_handler(question)
+
         initial: GraphState = {
             "question": question,
             "query": question,
@@ -224,6 +231,7 @@ class AgentPipeline:
             "sources": [],
             "retry_count": 0,
             "timings": {},
+            "callbacks": [handler] if handler else [],
         }
 
         result = self._graph.invoke(initial)
