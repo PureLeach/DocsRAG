@@ -165,6 +165,17 @@ With `vllm`, the API uses `ChatOpenAI` pointing at a [vllm-metal](https://github
 
 **Finding:** vllm-metal is **3.8× faster** on generation latency vs Ollama on M4 Max. MLX uses Apple Silicon unified memory more efficiently than llama.cpp. On a CUDA GPU, the same code (with `vllm/vllm-openai` image) would provide similar or greater speedup.
 
+**Quality comparison (Ragas eval, 25 samples, chunk\_size=1024, top\_k=5):**
+
+| Metric | Ollama q4\_K\_M | vllm-metal 4bit | Δ |
+|---|---|---|---|
+| faithfulness | **0.882** | 0.827 | −0.055 |
+| answer\_relevancy | 0.886 | **0.907** | +0.021 |
+| context\_precision | 0.598 | 0.598 | ≈0 |
+| context\_recall | 0.557 | 0.557 | ≈0 |
+
+Context metrics are identical (same retrieval). Minor faithfulness/relevancy gap reflects quantization format differences (GGUF q4\_K\_M vs MLX 4bit), not a meaningful quality difference at this sample size.
+
 To reproduce:
 ```bash
 # Start vllm-metal
