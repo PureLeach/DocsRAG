@@ -7,9 +7,17 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
 from loguru import logger
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from api.config import settings
 from api.graph import AgentPipeline, get_agent_pipeline
+from api.metrics import (
+    rag_answer_length_chars,
+    rag_generation_duration_seconds,
+    rag_requests_total,
+    rag_retrieval_duration_seconds,
+    rag_top_k,
+)
 from api.rag import RAGPipeline, get_pipeline
 from api.schemas import AgentAskResponse, AskRequest, AskResponse, HealthResponse
 
@@ -30,6 +38,8 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+Instrumentator().instrument(app).expose(app)
 
 
 PipelineDep = Annotated[RAGPipeline, Depends(get_pipeline)]
@@ -71,6 +81,12 @@ def ask(request: AskRequest, pipeline: PipelineDep) -> AskResponse:
         logger.exception("RAG pipeline failed")
         raise HTTPException(status_code=500, detail=f"Pipeline error: {exc}") from exc
 
+    rag_requests_total.labels(endpoint="ask").inc()
+    rag_retrieval_duration_seconds.labels(endpoint="ask").observe(timings["retrieval_ms"] / 1000)
+    rag_generation_duration_seconds.labels(endpoint="ask").observe(timings["generation_ms"] / 1000)
+    rag_top_k.observe(request.top_k)
+    rag_answer_length_chars.observe(len(answer))
+
     return AskResponse(
         question=request.question,
         answer=answer,
@@ -93,6 +109,12 @@ def agent_ask(request: AskRequest, agent: AgentPipelineDep) -> AgentAskResponse:
     except Exception as exc:
         logger.exception("Agent pipeline failed")
         raise HTTPException(status_code=500, detail=f"Agent error: {exc}") from exc
+
+    rag_requests_total.labels(endpoint="agent_ask").inc()
+    rag_retrieval_duration_seconds.labels(endpoint="agent_ask").observe(timings["retrieval_ms"] / 1000)
+    rag_generation_duration_seconds.labels(endpoint="agent_ask").observe(timings["generation_ms"] / 1000)
+    rag_top_k.observe(request.top_k)
+    rag_answer_length_chars.observe(len(answer))
 
     return AgentAskResponse(
         question=request.question,
