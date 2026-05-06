@@ -102,7 +102,7 @@ ask:
 	@curl -s -X POST http://localhost:8000/ask \
 		-H 'Content-Type: application/json' \
 		-d '{"question": $(call quote,$(Q)), "top_k": 5, "include_contexts": false}' \
-		| python -m json.tool
+		| python -m json.tool --no-ensure-ascii
 
 warmup:
 	@echo "Sending warmup request — this loads the LLM into Ollama's RAM..."
