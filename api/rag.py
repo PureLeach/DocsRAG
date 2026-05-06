@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import Literal
 
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
@@ -18,6 +19,8 @@ from api.prompts import PROMPT
 from api.schemas import Source
 from indexing.embeddings import EmbeddingModel
 
+RetrievalStrategy = Literal["dense", "hybrid", "hybrid_rerank"]
+
 
 @dataclass(slots=True)
 class RetrievalHit:
@@ -25,6 +28,19 @@ class RetrievalHit:
 
     document: Document
     score: float
+
+
+def _scored_point_to_hit(point: ScoredPoint) -> RetrievalHit:
+    payload = point.payload or {}
+    doc = Document(
+        page_content=str(payload.get("text", "")),
+        metadata={
+            "source_path": payload.get("source_path", "unknown"),
+            "header_path": payload.get("header_path", ""),
+            "chunk_index": payload.get("chunk_index", -1),
+        },
+    )
+    return RetrievalHit(document=doc, score=float(point.score))
 
 
 class RAGPipeline:
@@ -35,8 +51,9 @@ class RAGPipeline:
     application-wide instance.
     """
 
-    def __init__(self) -> None:
-        logger.info("Initializing RAGPipeline")
+    def __init__(self, retrieval_strategy: RetrievalStrategy = "dense") -> None:
+        logger.info("Initializing RAGPipeline (strategy={})", retrieval_strategy)
+        self._strategy = retrieval_strategy
 
         # Embedder: same model used during indexing — guarantees identical
         # vector space and pooling/normalization between index- and query-time.
@@ -60,16 +77,39 @@ class RAGPipeline:
         # Composed chain: prompt → llm → string output.
         self._chain = PROMPT | self._llm | StrOutputParser()
 
+        # Hybrid retriever is built lazily on first use to avoid loading
+        # BM25 index and reranker when strategy is "dense".
+        self._hybrid_retriever = None
+        if retrieval_strategy in ("hybrid", "hybrid_rerank"):
+            self._hybrid_retriever = self._build_hybrid_retriever(retrieval_strategy)
+
         logger.info(
-            "RAGPipeline ready | collection={} | model={} | base_url={}",
+            "RAGPipeline ready | collection={} | model={} | strategy={}",
             settings.qdrant_collection,
             settings.ollama_model,
-            settings.ollama_base_url,
+            retrieval_strategy,
+        )
+
+    def _build_hybrid_retriever(self, strategy: RetrievalStrategy):  # type: ignore[return]
+        from api.retriever import HybridRetriever, load_or_build_bm25, load_reranker
+
+        bm25_index = load_or_build_bm25(self._qdrant_client)
+        reranker = load_reranker() if strategy == "hybrid_rerank" else None
+        return HybridRetriever(
+            embedder=self._embedder,
+            qdrant_client=self._qdrant_client,
+            bm25_index=bm25_index,
+            reranker=reranker,
         )
 
     # public API
 
-    def retrieve(self, query: str, top_k: int) -> list[RetrievalHit]:
+    def retrieve(self, query: str, top_k: int, rerank_top_n: int = 20) -> list[RetrievalHit]:
+        if self._hybrid_retriever is not None:
+            return self._hybrid_retriever.retrieve(query, top_k=top_k, rerank_top_n=rerank_top_n)
+        return self._dense_retrieve(query, top_k)
+
+    def _dense_retrieve(self, query: str, top_k: int) -> list[RetrievalHit]:
         """Vector-search the Qdrant collection."""
         query_vector = self._embedder.encode([query], show_progress=False)[0]
         response = self._qdrant_client.query_points(
@@ -78,27 +118,14 @@ class RAGPipeline:
             limit=top_k,
             with_payload=True,
         )
-        hits = [self._scored_point_to_hit(r) for r in response.points]
+        hits = [_scored_point_to_hit(r) for r in response.points]
         logger.debug(
-            "Retrieved {} hits for query={!r} (top_score={:.3f})",
+            "Dense retrieved {} hits for query={!r} (top_score={:.3f})",
             len(hits),
             query,
             hits[0].score if hits else 0.0,
         )
         return hits
-
-    @staticmethod
-    def _scored_point_to_hit(point: ScoredPoint) -> RetrievalHit:
-        payload = point.payload or {}
-        doc = Document(
-            page_content=str(payload.get("text", "")),
-            metadata={
-                "source_path": payload.get("source_path", "unknown"),
-                "header_path": payload.get("header_path", ""),
-                "chunk_index": payload.get("chunk_index", -1),
-            },
-        )
-        return RetrievalHit(document=doc, score=float(point.score))
 
     def generate(self, question: str, hits: list[RetrievalHit]) -> str:
         """Build the prompt from retrieved chunks and call the LLM."""
@@ -107,11 +134,15 @@ class RAGPipeline:
         return answer.strip()
 
     def ask(
-        self, question: str, top_k: int, include_contexts: bool
+        self,
+        question: str,
+        top_k: int,
+        include_contexts: bool,
+        rerank_top_n: int = 20,
     ) -> tuple[str, list[Source], dict[str, int]]:
         """Full pipeline: retrieve → generate. Returns answer, sources, timings."""
         t0 = time.perf_counter()
-        hits = self.retrieve(question, top_k=top_k)
+        hits = self.retrieve(question, top_k=top_k, rerank_top_n=rerank_top_n)
         t1 = time.perf_counter()
         answer = self.generate(question, hits)
         t2 = time.perf_counter()
@@ -123,7 +154,8 @@ class RAGPipeline:
             "total_ms": int((t2 - t0) * 1000),
         }
         logger.info(
-            "ask | retrieval={}ms generation={}ms total={}ms | hits={} | q={!r}",
+            "ask | strategy={} retrieval={}ms generation={}ms total={}ms | hits={} | q={!r}",
+            self._strategy,
             timings["retrieval_ms"],
             timings["generation_ms"],
             timings["total_ms"],

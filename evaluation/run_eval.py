@@ -46,14 +46,16 @@ def load_dataset(path: Path) -> list[dict[str, str]]:
 
 # pipeline
 
-def build_pipeline() -> RAGPipeline:
-    return RAGPipeline()
+def build_pipeline(config: dict[str, Any]) -> RAGPipeline:
+    strategy = config.get("retrieval_strategy", "dense")
+    return RAGPipeline(retrieval_strategy=strategy)
 
 
 def run_pipeline(
     pipeline: RAGPipeline,
     samples: list[dict[str, str]],
     top_k: int,
+    rerank_top_n: int = 20,
 ) -> list[SingleTurnSample]:
     """Run every question through the pipeline, collect answers and contexts."""
     results: list[SingleTurnSample] = []
@@ -66,6 +68,7 @@ def run_pipeline(
             question=question,
             top_k=top_k,
             include_contexts=True,
+            rerank_top_n=rerank_top_n,
         )
         contexts = [s.content for s in sources if s.content]
 
@@ -95,6 +98,7 @@ def build_ragas_llm(config: dict[str, Any]) -> LangchainLLMWrapper:
         model=config["llm_model"],
         base_url=settings.ollama_base_url,
         temperature=0.0,
+        format="json",
     )
     return LangchainLLMWrapper(llm)
 
@@ -161,6 +165,8 @@ def log_to_mlflow(
             "embedding_model": config["embedding_model"],
             "llm_model": config["llm_model"],
             "prompt_version": config["prompt_version"],
+            "retrieval_strategy": config.get("retrieval_strategy", "dense"),
+            "rerank_top_n": config.get("rerank_top_n", 20),
             "n_samples": n_samples,
             "config_file": Path(config_path).name,
         })
@@ -191,11 +197,12 @@ def main() -> None:
     t_start = time.perf_counter()
 
     samples = load_dataset(GOLDEN_DATASET_PATH)
-    pipeline = build_pipeline()
+    pipeline = build_pipeline(config)
     ragas_llm = build_ragas_llm(config)
     ragas_embeddings = build_ragas_embeddings(config)
 
-    ragas_samples = run_pipeline(pipeline, samples, top_k=config["top_k"])
+    rerank_top_n = config.get("rerank_top_n", 20)
+    ragas_samples = run_pipeline(pipeline, samples, top_k=config["top_k"], rerank_top_n=rerank_top_n)
     scores = compute_metrics(ragas_samples, ragas_llm, ragas_embeddings)
 
     scores["eval_time_sec"] = round(time.perf_counter() - t_start, 1)

@@ -20,9 +20,7 @@ class Source(BaseModel):
     )
     score: float = Field(
         ...,
-        description="Cosine similarity score from the vector store (higher is better)",
-        ge=0.0,
-        le=1.0,
+        description="Relevance score (higher is better). Cosine similarity [0, 1] for dense retrieval; unbounded logit for cross-encoder reranking.",
     )
     content: str | None = Field(
         default=None,
