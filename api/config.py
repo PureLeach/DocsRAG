@@ -36,9 +36,9 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_dim: int = 384  # bge-small-en-v1.5 produces 384-dim vectors
 
-    # Indexing defaults 
-    chunk_size: int = 512
-    chunk_overlap: int = 50
+    # Indexing defaults (best config from Task 4 sweep)
+    chunk_size: int = 1024
+    chunk_overlap: int = 100
 
     # Document source 
     docs_source_path: Path = Field(

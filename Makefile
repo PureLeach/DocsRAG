@@ -31,7 +31,7 @@ help:
 	@echo "  Indexing:"
 	@echo "    make fetch-docs    - Download FastAPI documentation"
 	@echo "    make index         - Run the indexing pipeline (incremental)"
-	@echo "    make reindex       - Recreate the collection and re-index from scratch"
+	@echo "    make reindex       - Recreate the collection (CHUNK_SIZE=1024 CHUNK_OVERLAP=100 by default)"
 	@echo "    make smoke         - Run a smoke retrieval test"
 	@echo ""
 	@echo "  Quality:"
@@ -107,8 +107,12 @@ fetch-docs:
 index:
 	python -m indexing.run_indexing
 
+CHUNK_SIZE ?= 1024
+CHUNK_OVERLAP ?= 100
+
 reindex:
-	python -m indexing.run_indexing --recreate
+	python -m indexing.run_indexing --recreate --chunk-size $(CHUNK_SIZE) --overlap $(CHUNK_OVERLAP)
+	rm -f data/bm25_index.pkl
 
 smoke:
 	python -m indexing.smoke_test "how to define a path parameter in FastAPI"

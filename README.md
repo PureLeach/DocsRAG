@@ -156,7 +156,8 @@ make build         # Build API Docker image
 make health        # GET /health
 make ask Q="..."   # POST /ask
 make warmup        # Load LLM into Ollama RAM (run after make up)
-make reindex       # Recreate Qdrant collection from scratch (chunk_size=512)
+make reindex                                      # Recreate with defaults (chunk_size=1024, overlap=100)
+make reindex CHUNK_SIZE=512 CHUNK_OVERLAP=50      # Override chunk params
 make smoke         # Retrieval sanity check
 make eval          # Run evaluation (CONFIG=configs/baseline.yaml by default)
 make mlflow-ui     # Open MLflow UI in browser
