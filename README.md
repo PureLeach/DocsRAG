@@ -4,6 +4,29 @@ Self-hosted RAG (Retrieval-Augmented Generation) system for technical documentat
 
 **Status:** ✅ All 8 tasks complete.
 
+## TL;DR
+
+End-to-end production-grade RAG system over FastAPI documentation (153 markdown files, 2540 chunks). Built from scratch as a learning project to demonstrate modern MLOps practices for LLM systems. Highlights:
+
+- **Evaluation-driven design.** Every retrieval/generation decision is backed by Ragas metrics on a 25-question golden dataset, tracked in MLflow.
+- **Honest negative results.** Tested hybrid search and agentic RAG; both lost to plain dense retrieval on this corpus and the README explains why.
+- **Switchable inference.** Same API code runs against Ollama (dev) or vLLM (prod) via a single env variable. Benchmark on M4 Max: vllm-metal **3.8× faster** than Ollama.
+- **Full observability stack.** Prometheus + Grafana for system metrics, LangFuse for LLM tracing — both fully optional and additive.
+
+## Key Findings
+
+These are the non-obvious results from running the full eval pipeline. Each is the kind of thing you only learn by actually building and measuring:
+
+1. **Bigger chunks beat more chunks.** Going from `chunk_size=512, top_k=10` to `chunk_size=1024, top_k=5` gave better metrics on every dimension (faithfulness +0.064, context_precision +0.072) while sending fewer tokens to the LLM. More semantic context per chunk > more chunks.
+
+2. **BM25 hurts on semantically rich corpora.** Hybrid retrieval (dense + BM25 via RRF) underperformed pure dense by **−0.093 faithfulness**. Technical documentation about FastAPI is full of natural-language explanation; keyword overlap from BM25 added more noise than signal. A cross-encoder reranker recovered some quality but still didn't beat dense.
+
+3. **Agentic RAG is a precision/recall trade, not a free win.** A LangGraph agent with relevance grading improved `context_precision` by +0.055 but cut `context_recall` by −0.107 — the binary grader discards borderline-relevant chunks that actually contained answers. Pick agentic when precision matters more than coverage; pick simple RAG otherwise.
+
+4. **vLLM on Apple Silicon is real and fast.** The MLX-based `vllm-metal` server delivers OpenAI-compatible API with **3.8× faster generation** than llama.cpp-based Ollama (891ms vs 3375ms avg) on M4 Max. Same code path works for production CUDA vLLM — swap the image, set `VLLM_BASE_URL`.
+
+5. **Cosine + normalized embeddings is non-negotiable.** Forgetting `normalize_embeddings=True` in `sentence-transformers` silently breaks retrieval quality without obvious errors. The bug doesn't surface until you measure with Ragas.
+
 ## Goals
 
 A production-grade RAG system demonstrating modern MLOps practices:
@@ -172,6 +195,10 @@ Parameters:
 
 Response includes `answer`, `sources` (with `source_path`, `header_path`, `score`), and timing breakdown (`retrieval_ms`, `generation_ms`, `total_ms`).
 
+### `POST /agent/ask`
+
+Routes the question through the LangGraph agent (query rewriting + relevance grading + conditional retry). Same request/response shape as `/ask`. Use when precision matters more than recall (see Task 6 results below).
+
 ## Evaluation
 
 Evaluation uses [Ragas](https://docs.ragas.io) metrics over a 25-question golden dataset derived from FastAPI documentation. Results are tracked in MLflow (`http://localhost:5000`).
@@ -180,6 +207,14 @@ Evaluation uses [Ragas](https://docs.ragas.io) metrics over a 25-question golden
 make eval CONFIG=configs/chunk_1024.yaml   # run evaluation (dense baseline)
 make mlflow-ui                             # open MLflow UI
 ```
+
+**Metric reference:**
+- **faithfulness** — does the answer follow from the retrieved context (no hallucination)?
+- **answer_relevancy** — does the answer actually address the question?
+- **context_precision** — of the retrieved chunks, how many are actually relevant?
+- **context_recall** — of the chunks needed to answer, how many were retrieved?
+
+`faithfulness` and `answer_relevancy` measure generation quality; `context_precision` and `context_recall` measure retrieval quality.
 
 ### Task 4 sweep — chunk size and top-k (dense retrieval)
 
@@ -191,6 +226,8 @@ make mlflow-ui                             # open MLflow UI
 | topk\_10 | 512 | 50 | 10 | 0.818 | **0.892** | 0.526 | 0.517 |
 | **chunk\_1024** ✓ | **1024** | **100** | **5** | **0.882** | 0.886 | **0.598** | **0.557** |
 
+**Takeaway:** chunk size dominates top-k. Doubling chunk size (512→1024) gave a bigger metric jump than doubling top-k (5→10), and used half the chunks. Frozen baseline for all subsequent experiments: `chunk_1024`.
+
 ### Task 5 — hybrid search and reranking (chunk\_size=1024, top\_k=5)
 
 | Strategy | faithfulness | answer\_relevancy | context\_precision | context\_recall |
@@ -200,6 +237,8 @@ make mlflow-ui                             # open MLflow UI
 | hybrid\_rerank (+ cross-encoder) | 0.825 | **0.890** | 0.566 | 0.510 |
 
 **Finding:** dense retrieval outperforms both hybrid variants on this dataset. BM25 adds keyword-match noise to semantically rich technical documentation where the dense embeddings already perform well. The cross-encoder partially recovers `answer_relevancy` and `context_precision` but cannot fully offset the RRF noise. Dense remains the production strategy.
+
+**When hybrid would likely help instead:** corpora with many exact-match terms that embeddings struggle with — error codes, API tokens, version numbers, product SKUs, function names without surrounding prose. The FastAPI docs corpus is the opposite: prose-heavy explanations where dense semantics shine.
 
 ### Task 6 — agentic RAG (chunk\_size=1024, top\_k=5, dense retrieval)
 
@@ -294,6 +333,61 @@ uv run python benchmarks/bench_backends.py
 # 6. Run Ragas eval on vllm
 INFERENCE_BACKEND=vllm uv run python evaluation/run_eval.py --config configs/chunk_1024.yaml
 ```
+## Lessons Learned
+
+Things this project taught me that aren't in any RAG tutorial:
+
+**1. Eval-driven beats intuition-driven, every time.**  
+Three different decisions in this project (chunk size, hybrid vs dense, agentic vs simple) felt obvious going in and turned out the opposite when measured. Without Ragas + MLflow I would have shipped worse versions of all three with full confidence. The evaluation harness was the single highest-leverage thing in the project.
+
+**2. "Production-ready" means swappable.**  
+The single `INFERENCE_BACKEND` env var is the difference between a one-off demo and a system you can actually deploy. The exact same RAG code runs against Ollama on a laptop or vLLM on H100s — only the URL changes. Designing for that boundary from the start (via OpenAI-compatible API) was free; retrofitting it would have been painful.
+
+**3. Determinism is a feature.**  
+`temperature=0.0` everywhere isn't paranoia — it's what makes Ragas evaluation actually reproducible across runs. Once that's broken, every "the metric improved" claim becomes "the metric improved or maybe noise."
+
+**4. Observability has to be additive.**  
+LangFuse and Prometheus were added in Task 7 with zero changes to the RAG pipeline logic. The pipeline doesn't know whether tracing is on. If observability is invasive (callbacks threading through business logic, conditional code paths for "metrics enabled"), it gets ripped out the first time it breaks something. Decouple it.
+
+**5. Embed once, embed everywhere — but make sure it's literally the same embedder.**  
+The same `EmbeddingModel` instance handles both indexing and query-time encoding. Using a different LangChain wrapper at query time (even one that "should" be equivalent) silently degrades retrieval because of subtle differences in pooling/normalization. The bug doesn't crash, it just makes things slightly worse. Eval would catch it; trust wouldn't.
+
+**6. Honest negative results > impressive demos.**  
+Showing that hybrid+rerank lost to dense, and that agentic RAG sacrificed recall for precision, is more interesting than claiming everything got better. Anyone can build a stack of trendy components; understanding the trade-offs is the actual MLOps skill.
+
+## Production Considerations
+
+What I'd do differently if this were a real production system:
+
+**Inference scaling**  
+- Move vLLM to a CUDA host with `vllm/vllm-openai` Docker image; same `INFERENCE_BACKEND=vllm` codepath works without changes.
+- Front it with a load balancer; vLLM supports continuous batching and multiple replicas.
+- Add request queueing with backpressure — `/ask` should fail fast under overload, not pile up.
+
+**Vector DB**  
+- Qdrant in HA mode with replicas; the current single-node setup loses data on disk failure.
+- Add a payload index on `source_path` if filtering by document section becomes a feature.
+- Periodic re-indexing pipeline (Airflow / Prefect) instead of a manual `make reindex`.
+
+**Evaluation**  
+- Expand the golden dataset from 25 to 200+ questions, ideally human-curated from real user logs.
+- Run eval in CI on every PR that touches `api/` or `indexing/` — fail builds on metric regression.
+- Add LLM-as-judge eval alongside Ragas to cover dimensions Ragas doesn't measure (style, completeness).
+
+**Observability**  
+- Self-hosted LangFuse instead of cloud free tier, integrated with org SSO.
+- Alert rules in Prometheus on `rag_generation_duration_seconds` p99, on Qdrant unavailability, on `rag_requests_total{status="error"}` rate.
+- Cost tracking — log token counts and compute per-request inference cost into Grafana.
+
+**Security**  
+- API auth (the current `/ask` is open). At minimum API keys, ideally OIDC.
+- Prompt injection mitigation — the current system prompt is firm but not exhaustively tested adversarially.
+- PII filtering on retrieved chunks if the corpus ever contains user data.
+
+**Quality**  
+- Streaming responses (`/ask/stream`) — current p95 is 5–8s, perceived latency would drop dramatically with token streaming.
+- Caching: identical-question cache keyed on question hash + retrieval config. ~30% of FAQ-style traffic is duplicates.
+- Re-ranking with a domain-tuned cross-encoder once the corpus stabilizes — generic `bge-reranker-v2-m3` is a starting point, not a finish line.
 
 ## Project Structure
 
