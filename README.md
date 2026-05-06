@@ -106,6 +106,51 @@ make mlflow-ui                             # open MLflow UI
 
 **Finding:** dense retrieval outperforms both hybrid variants on this dataset. BM25 adds keyword-match noise to semantically rich technical documentation where the dense embeddings already perform well. The cross-encoder partially recovers `answer_relevancy` and `context_precision` but cannot fully offset the RRF noise. Dense remains the production strategy.
 
+### Task 6 — agentic RAG (chunk\_size=1024, top\_k=5, dense retrieval)
+
+| Strategy | faithfulness | answer\_relevancy | context\_precision | context\_recall |
+|---|---|---|---|---|
+| dense (baseline) | **0.882** | 0.886 | **0.598** | **0.557** |
+| agentic | — | — | — | — |
+
+*Agentic eval pending.*
+
+## Agentic RAG Graph
+
+The `/agent/ask` endpoint runs questions through a LangGraph agent that rewrites the query, grades retrieved chunks for relevance, and retries retrieval if necessary.
+
+```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+    __start__([START]):::first
+    query_rewriter(query_rewriter)
+    retriever(retriever)
+    relevance_grader(relevance_grader)
+    generator(generator)
+    __end__([END]):::last
+    __start__ --> query_rewriter;
+    query_rewriter --> retriever;
+    retriever --> relevance_grader;
+    relevance_grader -. generate .-> generator;
+    relevance_grader -. retry .-> query_rewriter;
+    generator --> __end__;
+    classDef default fill:#f2f0ff,line-height:1.2
+    classDef first fill-opacity:0
+    classDef last fill:#bfb6fc
+```
+
+**Nodes:**
+- `query_rewriter` — LLM rewrites the question to improve retrieval; on retry uses different phrasing
+- `retriever` — dense vector search via Qdrant
+- `relevance_grader` — LLM scores each chunk as relevant/not relevant (JSON verdict)
+- `generator` — generates the final answer from relevant chunks only
+
+**Retry logic:** if fewer than 2 chunks pass grading and no retry has been attempted, the graph loops back to `query_rewriter`. Maximum 1 retry.
+
 ## Project Structure
 
 ```
