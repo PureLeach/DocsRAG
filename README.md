@@ -2,7 +2,7 @@
 
 Self-hosted RAG (Retrieval-Augmented Generation) system for technical documentation Q&A.
 
-**Status:** 🚧 In active development — Task 5 complete, Task 6 (agentic RAG) next.
+**Status:** 🚧 In active development — Task 6 complete, Task 7 (observability) next.
 
 ## Goals
 
@@ -110,10 +110,10 @@ make mlflow-ui                             # open MLflow UI
 
 | Strategy | faithfulness | answer\_relevancy | context\_precision | context\_recall |
 |---|---|---|---|---|
-| dense (baseline) | **0.882** | 0.886 | **0.598** | **0.557** |
-| agentic | — | — | — | — |
+| dense (baseline) | **0.882** | 0.886 | 0.598 | **0.557** |
+| agentic | 0.817 | 0.813 | **0.653** | 0.450 |
 
-*Agentic eval pending.*
+**Finding:** agentic grading improves `context_precision` (+0.055) by filtering irrelevant chunks before generation, but at the cost of `context_recall` (−0.107): the binary relevance grader discards borderline-relevant chunks. `faithfulness` and `answer_relevancy` drop slightly because graded-out context sometimes contained answers. Dense remains the better end-to-end strategy; the agentic pipeline is useful when precision matters more than recall.
 
 ## Agentic RAG Graph
 
@@ -219,6 +219,6 @@ make test          # pytest
 - [x] Task 3: Basic RAG API (FastAPI + LangChain + Ollama, verified end-to-end)
 - [x] Task 4: Evaluation framework (Ragas + MLflow, 5 configs swept, baseline frozen)
 - [x] Task 5: Hybrid search + reranker (BM25 + RRF + cross-encoder; dense remains best)
-- [ ] Task 6: Agentic RAG with LangGraph
+- [x] Task 6: Agentic RAG with LangGraph (query rewriting + relevance grading; precision↑ recall↓)
 - [ ] Task 7: Observability (LangFuse + Prometheus/Grafana)
 - [ ] Task 8: vLLM deployment + benchmarks
