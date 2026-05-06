@@ -78,80 +78,80 @@ make install
 cp .env.example .env
 ```
 
-Обязательно заполнить в `.env`:
+Required fields in `.env`:
 
 ```
-HF_TOKEN=hf_...   # Hugging Face token (нужен для загрузки модели эмбеддингов)
+HF_TOKEN=hf_...   # Hugging Face token (required to download the embedding model)
 ```
 
-Остальные значения можно оставить как есть для локального запуска.
+All other values can be left as-is for local development.
 
 ### Step 3 — Pull the LLM model into Ollama
 
 ```bash
-# Убедись что Ollama app запущен (иконка в menu bar)
+# Make sure the Ollama app is running (icon in the menu bar)
 ollama pull qwen2.5:7b-instruct-q4_K_M
 ```
 
 ### Step 4 — Start infrastructure
 
 ```bash
-make up        # поднимает Qdrant + API + MLflow + Prometheus + Grafana
-make health    # проверяет что всё живое
+make up        # starts Qdrant + API + MLflow + Prometheus + Grafana
+make health    # checks that everything is up
 ```
 
-Первый запуск API занимает ~30–60 сек — скачивается модель эмбеддингов (~130 MB).
+The first API start takes ~30–60 s — the embedding model (~130 MB) is being downloaded.
 
 ### Step 5 — Index documents (one-time, ~2 min)
 
 ```bash
-make fetch-docs   # скачивает 153 markdown-файла FastAPI docs в data/raw/
-make reindex      # индексирует в Qdrant (chunk_size=1024, overlap=100)
+make fetch-docs   # downloads 153 FastAPI docs markdown files into data/raw/
+make reindex      # indexes into Qdrant (chunk_size=1024, overlap=100)
 ```
 
 ### Step 6 — Ask a question
 
 ```bash
-make warmup                                             # загружает LLM в RAM Ollama
+make warmup                                             # loads the LLM into Ollama RAM
 make ask Q='How do I define a path parameter in FastAPI?'
 ```
 
-Ожидаемый ответ за ~3–5 сек с указанием источников (`tutorial/path-params.md`).
+Expected response in ~3–5 s with source citations (`tutorial/path-params.md`).
 
 ### Step 7 — Observability (optional)
 
 ```bash
-make grafana-ui    # http://localhost:3000 — логин admin/admin, дашборд DocsRAG
-make prometheus-ui # http://localhost:9090 — raw метрики
-make mlflow-ui     # http://localhost:5000 — результаты eval экспериментов
+make grafana-ui    # http://localhost:3000 — login admin/admin, DocsRAG dashboard
+make prometheus-ui # http://localhost:9090 — raw metrics
+make mlflow-ui     # http://localhost:5000 — eval experiment results
 ```
 
-LangFuse трейсинг включается добавлением ключей в `.env`:
+LangFuse tracing is enabled by adding keys to `.env`:
 ```
 LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
 LANGFUSE_BASE_URL=https://cloud.langfuse.com
 ```
-Получить ключи: [cloud.langfuse.com](https://cloud.langfuse.com) → проект → Settings → API Keys.
+Get keys at: [cloud.langfuse.com](https://cloud.langfuse.com) → project → Settings → API Keys.
 
 ### Step 8 — vllm-metal backend (optional, Apple Silicon only)
 
-Более быстрый инференс через MLX (3.8× быстрее Ollama):
+Faster inference via MLX (3.8× faster than Ollama):
 
 ```bash
-# Установка (только в локальный .venv, не в pyproject.toml)
+# Install (local .venv only — do NOT add to pyproject.toml)
 uv pip install vllm-metal
 
-# Запуск сервера
+# Start the server
 make vllm-start
 
-# Проверка
+# Check status
 make vllm-status
 
-# Переключение API на vllm
+# Switch the API to vllm
 echo "INFERENCE_BACKEND=vllm" >> .env
 
-# Проверка запроса
+# Verify with a request
 make ask Q='What is FastAPI?'
 ```
 
@@ -161,7 +161,7 @@ make ask Q='What is FastAPI?'
 # Ollama (baseline)
 make eval CONFIG=configs/chunk_1024.yaml
 
-# vllm-metal (нужен запущенный vllm-metal)
+# vllm-metal (requires a running vllm-metal server)
 INFERENCE_BACKEND=vllm uv run python evaluation/run_eval.py --config configs/chunk_1024.yaml
 ```
 
@@ -454,14 +454,3 @@ make format        # ruff --fix + black
 make type-check    # mypy
 make test          # pytest
 ```
-
-## Roadmap
-
-- [x] Task 1: Infrastructure setup
-- [x] Task 2: Indexing pipeline (2540 chunks at chunk\_size=1024, smoke tests passing)
-- [x] Task 3: Basic RAG API (FastAPI + LangChain + Ollama, verified end-to-end)
-- [x] Task 4: Evaluation framework (Ragas + MLflow, 5 configs swept, baseline frozen)
-- [x] Task 5: Hybrid search + reranker (BM25 + RRF + cross-encoder; dense remains best)
-- [x] Task 6: Agentic RAG with LangGraph (query rewriting + relevance grading; precision↑ recall↓)
-- [x] Task 7: Observability (LangFuse tracing + Prometheus metrics + Grafana dashboard)
-- [x] Task 8: vLLM backend (vllm-metal on Apple Silicon) + benchmark (3.8× faster than Ollama)
