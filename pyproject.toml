@@ -25,6 +25,7 @@ dependencies = [
     "torch>=2.11.0",
     "uvicorn>=0.34.0",
     "langfuse>=4.5.1",
+    "langchain-openai>=1.2.1",
 ]
 
 [project.optional-dependencies]
