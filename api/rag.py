@@ -67,7 +67,7 @@ class RAGPipeline:
             settings.ollama_base_url,
         )
 
-    # ----- public API -----
+    # public API
 
     def retrieve(self, query: str, top_k: int) -> list[RetrievalHit]:
         """Vector-search the Qdrant collection."""
@@ -132,7 +132,7 @@ class RAGPipeline:
         )
         return answer, sources, timings
 
-    # ----- diagnostics -----
+    # diagnostics
 
     def collection_points_count(self) -> int:
         """Number of points in the Qdrant collection (used by /health)."""
@@ -141,7 +141,7 @@ class RAGPipeline:
         )
         return int(info.count)
 
-    # ----- internals -----
+    # internals
 
     @staticmethod
     def _format_context(hits: list[RetrievalHit]) -> str:

@@ -12,7 +12,7 @@ from typing import Any
 import mlflow
 import yaml
 from loguru import logger
-from ragas import EvaluationDataset, evaluate
+from ragas import EvaluationDataset, RunConfig, evaluate
 from ragas.dataset_schema import SingleTurnSample
 from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.llms import LangchainLLMWrapper
@@ -35,7 +35,7 @@ EXPERIMENT_NAME = "docsrag-rag-eval"
 GOLDEN_DATASET_PATH = Path(__file__).parent / "golden_dataset.json"
 
 
-# ----- data -----
+# data
 
 def load_dataset(path: Path) -> list[dict[str, str]]:
     with path.open() as f:
@@ -44,7 +44,7 @@ def load_dataset(path: Path) -> list[dict[str, str]]:
     return data
 
 
-# ----- pipeline -----
+# pipeline
 
 def build_pipeline() -> RAGPipeline:
     return RAGPipeline()
@@ -88,7 +88,7 @@ def run_pipeline(
     return results
 
 
-# ----- metrics -----
+# metrics
 
 def build_ragas_llm(config: dict[str, Any]) -> LangchainLLMWrapper:
     llm = ChatOllama(
@@ -122,8 +122,16 @@ def compute_metrics(
     context_recall.llm = ragas_llm
     metrics = [faithfulness, answer_relevancy, context_precision, context_recall]
 
+    # timeout=180s и max_workers=1 — Ollama однопоточный, параллелизм только мешает
+    run_config = RunConfig(timeout=180, max_retries=3, max_workers=1)
+
     logger.info("Running Ragas evaluation on {} samples...", len(ragas_samples))
-    result = evaluate(dataset=dataset, metrics=metrics, raise_exceptions=False)
+    result = evaluate(
+        dataset=dataset,
+        metrics=metrics,
+        run_config=run_config,
+        raise_exceptions=False,
+    )
 
     df = result.to_pandas()
     scores: dict[str, float] = {}
@@ -134,7 +142,7 @@ def compute_metrics(
     return scores
 
 
-# ----- mlflow -----
+# mlflow
 
 def log_to_mlflow(
     config: dict[str, Any],
@@ -165,7 +173,7 @@ def log_to_mlflow(
     return run_url
 
 
-# ----- entrypoint -----
+# entrypoint
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run RAG evaluation")
