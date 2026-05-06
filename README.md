@@ -2,7 +2,7 @@
 
 Self-hosted RAG (Retrieval-Augmented Generation) system for technical documentation Q&A.
 
-**Status:** 🚧 In active development — Task 7 complete, Task 8 (vLLM) next.
+**Status:** ✅ All 8 tasks complete.
 
 ## Goals
 
@@ -178,11 +178,26 @@ Context metrics are identical (same retrieval). Minor faithfulness/relevancy gap
 
 To reproduce:
 ```bash
-# Start vllm-metal
+# 1. Install vllm-metal (macOS ARM64 only — do NOT add to pyproject.toml)
+uv pip install vllm-metal
+
+# 2. Start vllm-metal server
 vllm-metal --model mlx-community/Qwen2.5-7B-Instruct-4bit --host 127.0.0.1 --port 8001
 
-# Run benchmark (Ollama must also be running)
+# 3. Verify the server is up
+curl http://127.0.0.1:8001/v1/models
+curl http://127.0.0.1:8001/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "mlx-community/Qwen2.5-7B-Instruct-4bit", "messages": [{"role": "user", "content": "Hi!"}], "max_tokens": 20}'
+
+# 4. Switch the API to vllm backend
+echo "INFERENCE_BACKEND=vllm" >> .env
+
+# 5. Run benchmark (Ollama must also be running)
 uv run python benchmarks/bench_backends.py
+
+# 6. Run Ragas eval on vllm
+INFERENCE_BACKEND=vllm uv run python evaluation/run_eval.py --config configs/chunk_1024.yaml
 ```
 
 ## Project Structure
