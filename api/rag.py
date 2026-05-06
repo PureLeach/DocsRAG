@@ -72,13 +72,13 @@ class RAGPipeline:
     def retrieve(self, query: str, top_k: int) -> list[RetrievalHit]:
         """Vector-search the Qdrant collection."""
         query_vector = self._embedder.encode([query], show_progress=False)[0]
-        results: list[ScoredPoint] = self._qdrant_client.search(
+        response = self._qdrant_client.query_points(
             collection_name=settings.qdrant_collection,
-            query_vector=query_vector,
+            query=query_vector,
             limit=top_k,
             with_payload=True,
         )
-        hits = [self._scored_point_to_hit(r) for r in results]
+        hits = [self._scored_point_to_hit(r) for r in response.points]
         logger.debug(
             "Retrieved {} hits for query={!r} (top_score={:.3f})",
             len(hits),
