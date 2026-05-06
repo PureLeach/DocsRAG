@@ -24,6 +24,7 @@ dependencies = [
     "sentence-transformers>=5.4.1",
     "torch>=2.11.0",
     "uvicorn>=0.34.0",
+    "langfuse>=4.5.1",
 ]
 
 [project.optional-dependencies]
