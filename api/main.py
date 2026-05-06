@@ -9,15 +9,16 @@ from fastapi import Depends, FastAPI, HTTPException
 from loguru import logger
 
 from api.config import settings
+from api.graph import AgentPipeline, get_agent_pipeline
 from api.rag import RAGPipeline, get_pipeline
-from api.schemas import AskRequest, AskResponse, HealthResponse
+from api.schemas import AgentAskResponse, AskRequest, AskResponse, HealthResponse
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Warm up the RAG pipeline at startup so the first request isn't slow."""
     logger.info("Starting DocsRAG API")
-    get_pipeline()  # constructs and caches the singleton
+    get_pipeline()  # constructs and caches the singleton; agent pipeline shares it
     logger.info("DocsRAG API ready")
     yield
     logger.info("Shutting down DocsRAG API")
@@ -32,6 +33,7 @@ app = FastAPI(
 
 
 PipelineDep = Annotated[RAGPipeline, Depends(get_pipeline)]
+AgentPipelineDep = Annotated[AgentPipeline, Depends(get_agent_pipeline)]
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -76,4 +78,30 @@ def ask(request: AskRequest, pipeline: PipelineDep) -> AskResponse:
         retrieval_ms=timings["retrieval_ms"],
         generation_ms=timings["generation_ms"],
         total_ms=timings["total_ms"],
+    )
+
+
+@app.post("/agent/ask", response_model=AgentAskResponse)
+def agent_ask(request: AskRequest, agent: AgentPipelineDep) -> AgentAskResponse:
+    """Answer a question using the agentic RAG graph (query rewriting + relevance grading)."""
+    try:
+        answer, sources, timings = agent.ask(
+            question=request.question,
+            top_k=request.top_k,
+            include_contexts=request.include_contexts,
+        )
+    except Exception as exc:
+        logger.exception("Agent pipeline failed")
+        raise HTTPException(status_code=500, detail=f"Agent error: {exc}") from exc
+
+    return AgentAskResponse(
+        question=request.question,
+        answer=answer,
+        sources=sources,
+        retrieval_ms=timings["retrieval_ms"],
+        generation_ms=timings["generation_ms"],
+        total_ms=timings["total_ms"],
+        rewrite_ms=timings.get("rewrite_ms", 0),
+        grading_ms=timings.get("grading_ms", 0),
+        retry_count=timings.get("retry_count", 0),
     )

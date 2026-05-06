@@ -46,8 +46,12 @@ def load_dataset(path: Path) -> list[dict[str, str]]:
 
 # pipeline
 
-def build_pipeline(config: dict[str, Any]) -> RAGPipeline:
+def build_pipeline(config: dict[str, Any]):
     strategy = config.get("retrieval_strategy", "dense")
+    if strategy == "agentic":
+        from api.graph import AgentPipeline
+        base = RAGPipeline(retrieval_strategy="dense")
+        return AgentPipeline(base)
     return RAGPipeline(retrieval_strategy=strategy)
 
 

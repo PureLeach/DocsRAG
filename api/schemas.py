@@ -61,6 +61,20 @@ class AskResponse(BaseModel):
     total_ms: int = Field(..., description="End-to-end latency in milliseconds")
 
 
+class AgentAskResponse(BaseModel):
+    """Agentic RAG answer with per-stage timing breakdown."""
+
+    question: str
+    answer: str
+    sources: list[Source]
+    retrieval_ms: int = Field(..., description="Total retrieval latency across all iterations")
+    generation_ms: int = Field(..., description="LLM generation latency")
+    total_ms: int = Field(..., description="End-to-end latency including rewriting and grading")
+    rewrite_ms: int = Field(default=0, description="Query rewriting latency")
+    grading_ms: int = Field(default=0, description="Relevance grading latency")
+    retry_count: int = Field(default=0, description="Number of retrieval retries performed (0 = no retry needed)")
+
+
 class HealthResponse(BaseModel):
     """Health check response."""
 

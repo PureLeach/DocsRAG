@@ -168,8 +168,8 @@ class HybridRetriever:
         if self._reranker is None:
             result = merged[:top_k]
         else:
-            pairs = [(query, hit.document.page_content) for hit in merged]
-            rerank_scores = self._reranker.predict(pairs)
+            pairs: list[tuple[str, str]] = [(query, hit.document.page_content) for hit in merged]
+            rerank_scores = self._reranker.predict(pairs)  # type: ignore[arg-type]
             reranked = sorted(
                 zip(merged, rerank_scores), key=lambda x: x[1], reverse=True
             )
