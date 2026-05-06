@@ -18,35 +18,130 @@ A production-grade RAG system demonstrating modern MLOps practices:
 | Layer | Technology |
 |---|---|
 | API | FastAPI + Pydantic |
-| LLM | Qwen 2.5 7B Instruct via Ollama |
+| LLM | Qwen 2.5 7B Instruct via Ollama (dev) / vllm-metal MLX (prod) |
 | Embeddings | BAAI/bge-small-en-v1.5 (384-dim, MPS on Apple Silicon) |
 | Vector DB | Qdrant (cosine similarity) |
-| Orchestration | LangChain |
+| Orchestration | LangChain + LangGraph |
 | Retrieval | Dense (Qdrant) + Sparse (BM25) + Cross-encoder reranker |
 | Evaluation | Ragas + MLflow |
-| Observability | LangFuse, Prometheus, Grafana *(Task 7)* |
-| Prod inference | vLLM *(Task 8)* |
+| Observability | LangFuse, Prometheus, Grafana |
+| Prod inference | vLLM (vllm-metal on Apple Silicon, vllm+CUDA in cloud) |
 | Packaging | Docker Compose, uv |
 
 ## Quick Start
 
-**Prerequisites:** Docker Desktop, Python 3.12, [Ollama](https://ollama.com) (native on macOS).
+> **Platform note:** this guide was developed and tested on **Apple Silicon (MacBook M4 Max)**. Core services (Qdrant, API, MLflow) run in Docker and should work on any platform. Ollama, embeddings (MPS), and vllm-metal are macOS ARM64-specific — behaviour on other systems is not guaranteed.
+
+### Prerequisites
+
+| Tool | Purpose | Install |
+|---|---|---|
+| Docker Desktop | Qdrant, API, MLflow, Prometheus, Grafana | [docker.com](https://www.docker.com/products/docker-desktop/) |
+| Python 3.12 | Local tooling (eval, indexing, benchmarks) | `brew install python@3.12` |
+| uv | Fast Python package manager | `brew install uv` |
+| Ollama (macOS app) | LLM inference — runs natively for Metal GPU | [ollama.com](https://ollama.com) |
+
+### Step 1 — Clone and install
 
 ```bash
-# 1. Pull the LLM model into Ollama
-ollama pull qwen2.5:7b-instruct-q4_K_M
+git clone <repo-url>
+cd DocsRAG
 
-# 2. Install Python dependencies
+# Create virtualenv and install all dependencies
 make install
+```
 
-# 3. Fetch FastAPI docs and index into Qdrant (one-time, ~2 min)
-make fetch-docs
-make up
-uv run python -m indexing.run_indexing --recreate --chunk-size 1024 --overlap 100
+### Step 2 — Configure environment
 
-# 4. Warm up and query
-make warmup
+```bash
+cp .env.example .env
+```
+
+Обязательно заполнить в `.env`:
+
+```
+HF_TOKEN=hf_...   # Hugging Face token (нужен для загрузки модели эмбеддингов)
+```
+
+Остальные значения можно оставить как есть для локального запуска.
+
+### Step 3 — Pull the LLM model into Ollama
+
+```bash
+# Убедись что Ollama app запущен (иконка в menu bar)
+ollama pull qwen2.5:7b-instruct-q4_K_M
+```
+
+### Step 4 — Start infrastructure
+
+```bash
+make up        # поднимает Qdrant + API + MLflow + Prometheus + Grafana
+make health    # проверяет что всё живое
+```
+
+Первый запуск API занимает ~30–60 сек — скачивается модель эмбеддингов (~130 MB).
+
+### Step 5 — Index documents (one-time, ~2 min)
+
+```bash
+make fetch-docs   # скачивает 153 markdown-файла FastAPI docs в data/raw/
+make reindex      # индексирует в Qdrant (chunk_size=1024, overlap=100)
+```
+
+### Step 6 — Ask a question
+
+```bash
+make warmup                                             # загружает LLM в RAM Ollama
 make ask Q='How do I define a path parameter in FastAPI?'
+```
+
+Ожидаемый ответ за ~3–5 сек с указанием источников (`tutorial/path-params.md`).
+
+### Step 7 — Observability (optional)
+
+```bash
+make grafana-ui    # http://localhost:3000 — логин admin/admin, дашборд DocsRAG
+make prometheus-ui # http://localhost:9090 — raw метрики
+make mlflow-ui     # http://localhost:5000 — результаты eval экспериментов
+```
+
+LangFuse трейсинг включается добавлением ключей в `.env`:
+```
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
+```
+Получить ключи: [cloud.langfuse.com](https://cloud.langfuse.com) → проект → Settings → API Keys.
+
+### Step 8 — vllm-metal backend (optional, Apple Silicon only)
+
+Более быстрый инференс через MLX (3.8× быстрее Ollama):
+
+```bash
+# Установка (только в локальный .venv, не в pyproject.toml)
+uv pip install vllm-metal
+
+# Запуск сервера
+make vllm-start
+
+# Проверка
+make vllm-status
+
+# Переключение API на vllm
+echo "INFERENCE_BACKEND=vllm" >> .env
+
+# Проверка запроса
+make ask Q='What is FastAPI?'
+```
+
+### Step 9 — Run evaluation (optional, ~15 min)
+
+```bash
+# Ollama (baseline)
+make eval CONFIG=configs/chunk_1024.yaml
+
+# vllm-metal (нужен запущенный vllm-metal)
+INFERENCE_BACKEND=vllm uv run python evaluation/run_eval.py --config configs/chunk_1024.yaml
 ```
 
 ## API
