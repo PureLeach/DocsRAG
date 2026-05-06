@@ -2,7 +2,7 @@
         lint format type-check test \
         fetch-docs index reindex smoke \
         build rebuild api-logs api-shell health ask warmup \
-        eval mlflow-ui clean
+        eval mlflow-ui prometheus-ui grafana-ui clean
 
 # Default question for `make ask` if Q is not provided
 Q ?= How do I define a path parameter in FastAPI?
@@ -141,6 +141,12 @@ eval:
 
 mlflow-ui:
 	@open http://localhost:5000 || xdg-open http://localhost:5000
+
+prometheus-ui:
+	@open http://localhost:9090 || xdg-open http://localhost:9090
+
+grafana-ui:
+	@open http://localhost:3000 || xdg-open http://localhost:3000
 
 # Misc
 
