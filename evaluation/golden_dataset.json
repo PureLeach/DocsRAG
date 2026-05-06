@@ -17,7 +17,7 @@
   },
   {
     "question": "How do you make a query parameter optional in FastAPI?",
-    "ground_truth": "Give the parameter a default value, typically None with an Optional type hint: def read_item(q: str | None = None). If the client omits the parameter, the function receives None. Parameters without default values are required."
+    "ground_truth": "Give the parameter a default value, typically None with an Optional type hint. On Python 3.10+ you can write q: str | None = None; on earlier versions use Optional[str] = None from typing. If the client omits the parameter, the function receives None. Parameters without default values are required."
   },
   {
     "question": "How do you declare a request body in FastAPI?",
@@ -25,7 +25,7 @@
   },
   {
     "question": "What does the response_model parameter do in FastAPI?",
-    "ground_truth": "response_model declares the Pydantic model used to serialize and filter the response. FastAPI validates the returned data against the model, removes fields not in the model (useful for hiding sensitive fields like passwords), and generates accurate OpenAPI response schema."
+    "ground_truth": "response_model declares the Pydantic model used to serialize and filter the response. FastAPI validates the returned data against the model, removes fields not in the model (useful for hiding sensitive fields like passwords), and generates accurate OpenAPI response schema. You can also fine-tune output with response_model_exclude_unset, response_model_exclude_none, and response_model_exclude_defaults, or use separate input/output models (e.g. UserIn vs UserOut) to cleanly separate request and response shapes."
   },
   {
     "question": "How do you return an HTTP error response in FastAPI?",
@@ -41,7 +41,7 @@
   },
   {
     "question": "How do you run a background task after returning a response in FastAPI?",
-    "ground_truth": "Import BackgroundTasks and declare it as a parameter in your path operation function. Call background_tasks.add_task(func, *args, **kwargs) to register a task. FastAPI will return the response to the client first and then run the task in the background."
+    "ground_truth": "Import BackgroundTasks and declare it as a parameter in your path operation function. Call background_tasks.add_task(func, *args, **kwargs) to register a task. FastAPI returns the response to the client first and then runs the task in the same process. This is suitable for short, lightweight work; for long-running, CPU-heavy, or retry-sensitive jobs use a dedicated task queue such as Celery, ARQ, or RQ."
   },
   {
     "question": "How do you add middleware to a FastAPI application?",
@@ -49,7 +49,7 @@
   },
   {
     "question": "How do you enable CORS in FastAPI?",
-    "ground_truth": "Add CORSMiddleware from fastapi.middleware.cors using app.add_middleware(). Configure allow_origins (list of allowed origins or ['*']), allow_methods, allow_headers, and optionally allow_credentials. This must be added before other middleware."
+    "ground_truth": "Add CORSMiddleware from fastapi.middleware.cors using app.add_middleware(). Configure allow_origins (list of allowed origins or ['*']), allow_methods, allow_headers, and optionally allow_credentials. Middleware in Starlette runs in reverse order of registration on incoming requests, so CORSMiddleware should be added late (typically as one of the last add_middleware calls) so that it executes first and can handle preflight OPTIONS requests before other middleware."
   },
   {
     "question": "How do you read cookie parameters in FastAPI?",
@@ -57,7 +57,7 @@
   },
   {
     "question": "How do you read custom HTTP headers in FastAPI?",
-    "ground_truth": "Import Header from fastapi and declare the parameter: def read_items(x_token: str | None = Header(default=None)). FastAPI automatically converts underscores to hyphens, so x_token reads the X-Token header. Duplicate headers are returned as a list."
+    "ground_truth": "Import Header from fastapi and declare the parameter: def read_items(x_token: str | None = Header(default=None)). By default Header has convert_underscores=True, which translates the Python parameter name x_token into the X-Token HTTP header (since header names with underscores are uncommon and often stripped by proxies). Set convert_underscores=False to disable this. Duplicate headers can be received as a list by typing the parameter as list[str]."
   },
   {
     "question": "How do you receive form data in FastAPI?",
@@ -89,11 +89,11 @@
   },
   {
     "question": "How do you manage application settings from environment variables in FastAPI?",
-    "ground_truth": "Create a Settings class inheriting from pydantic_settings.BaseSettings. Declare fields with type annotations; Pydantic reads values from environment variables with matching names (case-insensitive). Use lru_cache to create a singleton: @lru_cache def get_settings(): return Settings()."
+    "ground_truth": "Create a Settings class inheriting from pydantic_settings.BaseSettings. Declare fields with type annotations; Pydantic reads values from environment variables with matching names. Case sensitivity is configurable via model_config (case_sensitive defaults to False, so env var names are matched case-insensitively unless you opt in). Use lru_cache to create a singleton: @lru_cache def get_settings(): return Settings()."
   },
   {
     "question": "When should you use async def vs def for path operation functions in FastAPI?",
-    "ground_truth": "Use async def when the function calls async libraries (e.g. async database clients, httpx). Use regular def when calling blocking I/O (e.g. requests, synchronous DB). FastAPI runs regular def functions in a thread pool to avoid blocking the event loop. Don't use async def with blocking calls."
+    "ground_truth": "Use async def when the function calls async libraries (e.g. async database clients, httpx). Use regular def when calling blocking I/O (e.g. requests, synchronous DB drivers); FastAPI runs regular def functions in a thread pool so they don't block the event loop. Never mix blocking calls inside async def: a blocking call in an async function stalls the entire event loop and freezes all concurrent requests handled by that worker, not just the current one. If you must call blocking code from async def, offload it via anyio.to_thread.run_sync or asyncio.to_thread."
   },
   {
     "question": "How do you implement OAuth2 password bearer authentication in FastAPI?",
