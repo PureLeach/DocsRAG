@@ -2,7 +2,7 @@
 
 Self-hosted RAG (Retrieval-Augmented Generation) system for technical documentation Q&A.
 
-**Status:** 🚧 In active development — Task 6 complete, Task 7 (observability) next.
+**Status:** 🚧 In active development — Task 7 complete, Task 8 (vLLM) next.
 
 ## Goals
 
@@ -206,6 +206,8 @@ make reindex CHUNK_SIZE=512 CHUNK_OVERLAP=50      # Override chunk params
 make smoke         # Retrieval sanity check
 make eval          # Run evaluation (CONFIG=configs/baseline.yaml by default)
 make mlflow-ui     # Open MLflow UI in browser
+make prometheus-ui # Open Prometheus UI (http://localhost:9090)
+make grafana-ui    # Open Grafana dashboard (http://localhost:3000, admin/admin)
 make lint          # ruff
 make format        # ruff --fix + black
 make type-check    # mypy
@@ -220,5 +222,5 @@ make test          # pytest
 - [x] Task 4: Evaluation framework (Ragas + MLflow, 5 configs swept, baseline frozen)
 - [x] Task 5: Hybrid search + reranker (BM25 + RRF + cross-encoder; dense remains best)
 - [x] Task 6: Agentic RAG with LangGraph (query rewriting + relevance grading; precision↑ recall↓)
-- [ ] Task 7: Observability (LangFuse + Prometheus/Grafana)
+- [x] Task 7: Observability (LangFuse tracing + Prometheus metrics + Grafana dashboard)
 - [ ] Task 8: vLLM deployment + benchmarks
