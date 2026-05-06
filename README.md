@@ -2,8 +2,6 @@
 
 Self-hosted RAG (Retrieval-Augmented Generation) system for technical documentation Q&A.
 
-**Status:** ✅ All 8 tasks complete.
-
 ## TL;DR
 
 End-to-end production-grade RAG system over FastAPI documentation (153 markdown files, 2540 chunks). Built from scratch as a learning project to demonstrate modern MLOps practices for LLM systems. Highlights:
