@@ -151,14 +151,41 @@ graph TD;
 
 **Retry logic:** if fewer than 2 chunks pass grading and no retry has been attempted, the graph loops back to `query_rewriter`. Maximum 1 retry.
 
+## Task 8 — vLLM backend + benchmark (Apple Silicon, M4 Max)
+
+Inference backend is switchable via `INFERENCE_BACKEND=ollama|vllm` in `.env`.  
+With `vllm`, the API uses `ChatOpenAI` pointing at a [vllm-metal](https://github.com/vllm-project/vllm-metal) endpoint (OpenAI-compatible, same API as production vLLM on CUDA).
+
+**Benchmark — generation latency, 5 warm questions, top\_k=3:**
+
+| Backend | avg gen | p50 gen | min | max |
+|---|---|---|---|---|
+| Ollama (Qwen2.5-7B q4\_K\_M, llama.cpp) | 3375ms | 3439ms | 2064ms | 4327ms |
+| **vllm-metal (Qwen2.5-7B 4bit, MLX)** | **891ms** | **911ms** | **705ms** | **1075ms** |
+
+**Finding:** vllm-metal is **3.8× faster** on generation latency vs Ollama on M4 Max. MLX uses Apple Silicon unified memory more efficiently than llama.cpp. On a CUDA GPU, the same code (with `vllm/vllm-openai` image) would provide similar or greater speedup.
+
+To reproduce:
+```bash
+# Start vllm-metal
+vllm-metal --model mlx-community/Qwen2.5-7B-Instruct-4bit --host 127.0.0.1 --port 8001
+
+# Run benchmark (Ollama must also be running)
+uv run python benchmarks/bench_backends.py
+```
+
 ## Project Structure
 
 ```
 docsrag/
-├── api/              # FastAPI service (Task 3)
-│   ├── main.py       # /health, /ask endpoints + lifespan
+├── api/              # FastAPI service
+│   ├── main.py       # /health, /ask, /agent/ask endpoints + Prometheus instrumentation
 │   ├── rag.py        # RAGPipeline: embed → retrieve → generate
 │   ├── retriever.py  # HybridRetriever: BM25Index + RRF + CrossEncoder (Task 5)
+│   ├── graph.py      # Agentic RAG graph via LangGraph (Task 6)
+│   ├── llm.py        # LLM factory: ChatOllama or ChatOpenAI→vLLM (Task 8)
+│   ├── metrics.py    # Prometheus custom metrics (Task 7)
+│   ├── tracing.py    # LangFuse callback helper (Task 7)
 │   ├── prompts.py    # System + user prompt templates
 │   ├── schemas.py    # Pydantic request/response models
 │   └── config.py     # Pydantic Settings
@@ -190,7 +217,8 @@ docsrag/
 - **Qdrant collection:** `docsrag`, 2540 chunks, chunk\_size=1024, overlap=100
 - **Retrieval strategy:** dense vector search (best by eval); hybrid and hybrid\_rerank available via config
 - **Generation:** `temperature=0.0` for determinism; answers cite sources as `[file.md]`
-- **Evaluation baseline frozen** — Task 6+ compare against chunk\_1024 dense results
+- **Inference backend:** `INFERENCE_BACKEND=ollama` (default) or `vllm` — switchable via `.env`
+- **Observability:** LangFuse tracing, Prometheus `/metrics`, Grafana dashboard at `:3000`
 
 ## Makefile Reference
 
@@ -223,4 +251,4 @@ make test          # pytest
 - [x] Task 5: Hybrid search + reranker (BM25 + RRF + cross-encoder; dense remains best)
 - [x] Task 6: Agentic RAG with LangGraph (query rewriting + relevance grading; precision↑ recall↓)
 - [x] Task 7: Observability (LangFuse tracing + Prometheus metrics + Grafana dashboard)
-- [ ] Task 8: vLLM deployment + benchmarks
+- [x] Task 8: vLLM backend (vllm-metal on Apple Silicon) + benchmark (3.8× faster than Ollama)
