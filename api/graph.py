@@ -25,12 +25,12 @@ for _var in ("ALL_PROXY", "all_proxy", "HTTPS_PROXY", "https_proxy", "HTTP_PROXY
     os.environ.pop(_var, None)
 
 from langchain_core.messages import HumanMessage
-from langchain_ollama import ChatOllama
 from langgraph.graph import END, START, StateGraph
 from loguru import logger
 from typing import TypedDict
 
 from api.config import settings
+from api.llm import make_llm
 
 if TYPE_CHECKING:
     from api.rag import RAGPipeline, RetrievalHit
@@ -56,18 +56,9 @@ class GraphState(TypedDict):
 def build_agent_graph(pipeline: "RAGPipeline"):
     """Build and compile the agentic RAG graph around an existing RAGPipeline."""
 
-    llm = ChatOllama(
-        model=settings.ollama_model,
-        base_url=settings.ollama_base_url,
-        temperature=0.0,
-    )
-    # Separate grader LLM with format="json" so Qwen reliably outputs structured verdicts.
-    grader_llm = ChatOllama(
-        model=settings.ollama_model,
-        base_url=settings.ollama_base_url,
-        temperature=0.0,
-        format="json",
-    )
+    llm = make_llm(temperature=0.0)
+    # Separate grader LLM with json_mode=True so Qwen reliably outputs structured verdicts.
+    grader_llm = make_llm(temperature=0.0, json_mode=True)
 
     def query_rewriter(state: GraphState) -> dict[str, Any]:
         question = state["question"]

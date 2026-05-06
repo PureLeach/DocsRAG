@@ -25,12 +25,18 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "docsrag"
 
-    # Ollama 
+    # Inference backend: "ollama" (default, local dev) or "vllm" (production)
+    inference_backend: str = "ollama"
+
+    # Ollama
     # Variant A (native Ollama on host): http://localhost:11434
     # Variant B (Ollama in Docker, called from another container): http://ollama:11434
-    # Variant B (Ollama in Docker, called from host): http://localhost:11434
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:7b-instruct-q4_K_M"
+
+    # vLLM — OpenAI-compatible endpoint (vllm-metal locally, vllm on CUDA in prod)
+    vllm_base_url: str = "http://localhost:8001/v1"
+    vllm_model: str = "mlx-community/Qwen2.5-7B-Instruct-4bit"
 
     # Embeddings 
     embedding_model: str = "BAAI/bge-small-en-v1.5"

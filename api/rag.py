@@ -9,12 +9,12 @@ from typing import Literal
 
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
-from langchain_ollama import ChatOllama
 from loguru import logger
 from qdrant_client import QdrantClient
 from qdrant_client.models import ScoredPoint
 
 from api.config import settings
+from api.llm import make_llm
 from api.prompts import PROMPT
 from api.schemas import Source
 from indexing.embeddings import EmbeddingModel
@@ -64,15 +64,11 @@ class RAGPipeline:
         # header_path, chunk_index — we map it to Document ourselves.
         self._qdrant_client = QdrantClient(url=settings.qdrant_url)
 
-        # LLM: ChatOllama hits OLLAMA_BASE_URL.
-        # Variant A (current): host.docker.internal:11434 from container,
-        # localhost:11434 from host.
+        # LLM: ChatOllama (Variant A/B) or ChatOpenAI→vLLM, controlled by INFERENCE_BACKEND.
+        # Variant A (current): Ollama native on host, API at host.docker.internal:11434.
         # Variant B (Ollama in Docker): http://ollama:11434 via compose network.
-        self._llm = ChatOllama(
-            model=settings.ollama_model,
-            base_url=settings.ollama_base_url,
-            temperature=0.0,  # deterministic for documentation Q&A
-        )
+        # vLLM: OpenAI-compatible endpoint at VLLM_BASE_URL (vllm-metal locally, CUDA in prod).
+        self._llm = make_llm(temperature=0.0)
 
         # Composed chain: prompt → llm → string output.
         self._chain = PROMPT | self._llm | StrOutputParser()
@@ -83,10 +79,12 @@ class RAGPipeline:
         if retrieval_strategy in ("hybrid", "hybrid_rerank"):
             self._hybrid_retriever = self._build_hybrid_retriever(retrieval_strategy)
 
+        active_model = settings.vllm_model if settings.inference_backend == "vllm" else settings.ollama_model
         logger.info(
-            "RAGPipeline ready | collection={} | model={} | strategy={}",
+            "RAGPipeline ready | collection={} | backend={} | model={} | strategy={}",
             settings.qdrant_collection,
-            settings.ollama_model,
+            settings.inference_backend,
+            active_model,
             retrieval_strategy,
         )
 
