@@ -176,6 +176,8 @@ def log_to_mlflow(
 # entrypoint
 
 def main() -> None:
+    import time
+
     parser = argparse.ArgumentParser(description="Run RAG evaluation")
     parser.add_argument("--config", required=True, help="Path to YAML config file")
     args = parser.parse_args()
@@ -186,6 +188,8 @@ def main() -> None:
 
     logger.info("Config: {}", config)
 
+    t_start = time.perf_counter()
+
     samples = load_dataset(GOLDEN_DATASET_PATH)
     pipeline = build_pipeline()
     ragas_llm = build_ragas_llm(config)
@@ -193,6 +197,8 @@ def main() -> None:
 
     ragas_samples = run_pipeline(pipeline, samples, top_k=config["top_k"])
     scores = compute_metrics(ragas_samples, ragas_llm, ragas_embeddings)
+
+    scores["eval_time_sec"] = round(time.perf_counter() - t_start, 1)
 
     run_url = log_to_mlflow(config, scores, str(config_path), len(samples))
 
