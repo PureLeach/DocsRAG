@@ -1,7 +1,8 @@
 .PHONY: help install up down logs ollama-status \
         lint format type-check test \
         fetch-docs index reindex smoke \
-        build rebuild api-logs api-shell health ask warmup clean
+        build rebuild api-logs api-shell health ask warmup \
+        eval mlflow-ui clean
 
 # Default question for `make ask` if Q is not provided
 Q ?= How do I define a path parameter in FastAPI?
@@ -127,7 +128,17 @@ type-check:
 test:
 	pytest -v
 
-# Misc 
+# Evaluation
+
+CONFIG ?= configs/baseline.yaml
+
+eval:
+	python evaluation/run_eval.py --config $(CONFIG)
+
+mlflow-ui:
+	@open http://localhost:5000 || xdg-open http://localhost:5000
+
+# Misc
 
 clean:
 	rm -rf .ruff_cache .mypy_cache .pytest_cache __pycache__ */__pycache__ */*/__pycache__
