@@ -64,6 +64,9 @@ services:
       EMBEDDING_MODEL: "BAAI/bge-small-en-v1.5"
       EMBEDDING_DIM: "384"
       HF_TOKEN: "${HF_TOKEN}"
+      LANGFUSE_PUBLIC_KEY: "${LANGFUSE_PUBLIC_KEY}"
+      LANGFUSE_SECRET_KEY: "${LANGFUSE_SECRET_KEY}"
+      LANGFUSE_BASE_URL: "${LANGFUSE_BASE_URL:-https://cloud.langfuse.com}"
     extra_hosts:
       # Required on Linux for host.docker.internal to resolve.
       # On Docker Desktop (macOS) it's already mapped, but specifying it
