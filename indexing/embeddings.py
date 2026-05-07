@@ -1,6 +1,6 @@
 """Sentence-transformer embeddings wrapper.
 
-Uses intfloat/multilingual-e5-small — 118MB, 384-dim, supports 100+ languages.
+Uses BAAI/bge-small-en-v1.5 — 384-dim, English, normalized cosine similarity.
 e5 models require task prefixes: pass prefix="query: " at query time and
 prefix="passage: " at indexing time for best retrieval quality.
 
@@ -18,7 +18,7 @@ from sentence_transformers import SentenceTransformer
 class EmbeddingModel:
     """Thin wrapper around SentenceTransformer with batched encoding."""
 
-    def __init__(self, model_name: str = "intfloat/multilingual-e5-small") -> None:
+    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5") -> None:
         device = self._select_device()
         logger.info(f"Loading embedding model '{model_name}' on device '{device}'")
         self._model = SentenceTransformer(model_name, device=device)

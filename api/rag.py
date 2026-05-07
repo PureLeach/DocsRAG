@@ -109,7 +109,7 @@ class RAGPipeline:
 
     def _dense_retrieve(self, query: str, top_k: int) -> list[RetrievalHit]:
         """Vector-search the Qdrant collection."""
-        query_vector = self._embedder.encode([query], show_progress=False, prefix=settings.embedding_query_prefix)[0]
+        query_vector = self._embedder.encode([query], show_progress=False)[0]
         response = self._qdrant_client.query_points(
             collection_name=settings.qdrant_collection,
             query=query_vector,
@@ -129,7 +129,10 @@ class RAGPipeline:
         """Build the prompt from retrieved chunks and call the LLM."""
         context = self._format_context(hits)
         invoke_config = {"callbacks": callbacks} if callbacks else {}
-        answer = self._chain.invoke({"context": context, "question": question}, config=invoke_config)
+        answer = self._chain.invoke(
+            {"context": context, "question": question},
+            config=invoke_config,
+        )
         return answer.strip()
 
     def ask(

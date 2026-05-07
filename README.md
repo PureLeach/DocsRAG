@@ -40,7 +40,7 @@ A production-grade RAG system demonstrating modern MLOps practices:
 |---|---|
 | API | FastAPI + Pydantic |
 | LLM | Qwen 2.5 7B Instruct via Ollama (dev) / vllm-metal MLX (prod) |
-| Embeddings | intfloat/multilingual-e5-small (384-dim, 100+ languages, MPS on Apple Silicon) |
+| Embeddings | BAAI/bge-small-en-v1.5 (384-dim, English, MPS on Apple Silicon) |
 | Vector DB | Qdrant (cosine similarity) |
 | Orchestration | LangChain + LangGraph |
 | Retrieval | Dense (Qdrant) + Sparse (BM25) + Cross-encoder reranker |
@@ -56,7 +56,7 @@ graph LR
     User[Client] -->|POST /ask| API[FastAPI Service]
 
     subgraph Inference
-        API -->|embed query| Embed[multilingual-e5-small<br/>sentence-transformers]
+        API -->|embed query| Embed[bge-small-en-v1.5<br/>sentence-transformers]
         API -->|vector search| Qdrant[(Qdrant<br/>2540 chunks)]
         API -->|chat completion| LLM{LLM Backend}
         LLM -->|dev| Ollama[Ollama<br/>Qwen 2.5 7B]
@@ -135,7 +135,7 @@ make up        # starts Qdrant + API + MLflow + Prometheus + Grafana
 make health    # checks that everything is up
 ```
 
-The first API start takes ~60–90 s — the embedding model (~470 MB) is being downloaded.
+The first API start takes ~30–60 s — the embedding model (~130 MB) is being downloaded.
 
 ### Step 5 — Index documents (one-time, ~2 min)
 
@@ -463,9 +463,9 @@ docsrag/
 ## Current State
 
 - **Qdrant collection:** `docsrag`, 2540 chunks, chunk\_size=1024, overlap=100
-- **Embeddings:** `intfloat/multilingual-e5-small` — supports Russian and other languages; queries use `"query: "` prefix, indexed chunks use `"passage: "` prefix (required for e5 models)
+- **Embeddings:** `BAAI/bge-small-en-v1.5` — 384-dim, English, normalized cosine similarity
 - **Retrieval strategy:** dense vector search (best by eval); hybrid and hybrid\_rerank available via config
-- **Generation:** `temperature=0.0` for determinism; answers cite sources as `[file.md]`; LLM responds in the same language as the question
+- **Generation:** `temperature=0.0` for determinism; answers cite sources as `[file.md]`
 - **Inference backend:** `INFERENCE_BACKEND=ollama` (default) or `vllm` — switchable via `.env`
 - **Observability:** LangFuse tracing, Prometheus `/metrics`, Grafana dashboard at `:3000`
 
