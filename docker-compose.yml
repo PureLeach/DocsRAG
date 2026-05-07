@@ -59,8 +59,11 @@ services:
       # Variant A: Ollama runs natively on the host. From the container,
       # we reach it via host.docker.internal (mapped below in extra_hosts).
       # Variant B (Ollama in Docker): change OLLAMA_BASE_URL to http://ollama:11434
+      INFERENCE_BACKEND: "${INFERENCE_BACKEND:-ollama}"
       OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://host.docker.internal:11434}"
       OLLAMA_MODEL: "${OLLAMA_MODEL:-qwen2.5:7b-instruct-q4_K_M}"
+      VLLM_BASE_URL: "${VLLM_BASE_URL:-http://host.docker.internal:8001/v1}"
+      VLLM_MODEL: "${VLLM_MODEL:-mlx-community/Qwen2.5-7B-Instruct-4bit}"
       EMBEDDING_MODEL: "${EMBEDDING_MODEL:-intfloat/multilingual-e5-small}"
       EMBEDDING_DIM: "${EMBEDDING_DIM:-384}"
       HF_TOKEN: "${HF_TOKEN}"
