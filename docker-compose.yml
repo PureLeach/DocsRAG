@@ -54,15 +54,15 @@ services:
       - "8000:8000"
     environment:
       # Qdrant lives in this compose network — use the service name.
-      QDRANT_URL: "http://qdrant:6333"
-      QDRANT_COLLECTION: "docsrag"
+      QDRANT_URL: "${QDRANT_URL:-http://qdrant:6333}"
+      QDRANT_COLLECTION: "${QDRANT_COLLECTION:-docsrag}"
       # Variant A: Ollama runs natively on the host. From the container,
       # we reach it via host.docker.internal (mapped below in extra_hosts).
-      # Variant B (Ollama in Docker): change to http://ollama:11434
-      OLLAMA_BASE_URL: "http://host.docker.internal:11434"
-      OLLAMA_MODEL: "qwen2.5:7b-instruct-q4_K_M"
-      EMBEDDING_MODEL: "intfloat/multilingual-e5-small"
-      EMBEDDING_DIM: "384"
+      # Variant B (Ollama in Docker): change OLLAMA_BASE_URL to http://ollama:11434
+      OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://host.docker.internal:11434}"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-qwen2.5:7b-instruct-q4_K_M}"
+      EMBEDDING_MODEL: "${EMBEDDING_MODEL:-intfloat/multilingual-e5-small}"
+      EMBEDDING_DIM: "${EMBEDDING_DIM:-384}"
       HF_TOKEN: "${HF_TOKEN}"
       LANGFUSE_PUBLIC_KEY: "${LANGFUSE_PUBLIC_KEY}"
       LANGFUSE_SECRET_KEY: "${LANGFUSE_SECRET_KEY}"
