@@ -61,7 +61,7 @@ services:
       # Variant B (Ollama in Docker): change to http://ollama:11434
       OLLAMA_BASE_URL: "http://host.docker.internal:11434"
       OLLAMA_MODEL: "qwen2.5:7b-instruct-q4_K_M"
-      EMBEDDING_MODEL: "BAAI/bge-small-en-v1.5"
+      EMBEDDING_MODEL: "intfloat/multilingual-e5-small"
       EMBEDDING_DIM: "384"
       HF_TOKEN: "${HF_TOKEN}"
       LANGFUSE_PUBLIC_KEY: "${LANGFUSE_PUBLIC_KEY}"
