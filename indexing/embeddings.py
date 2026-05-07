@@ -18,7 +18,7 @@ from sentence_transformers import SentenceTransformer
 class EmbeddingModel:
     """Thin wrapper around SentenceTransformer with batched encoding."""
 
-    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5") -> None:
+    def __init__(self, model_name: str = "intfloat/multilingual-e5-small") -> None:
         device = self._select_device()
         logger.info(f"Loading embedding model '{model_name}' on device '{device}'")
         self._model = SentenceTransformer(model_name, device=device)
