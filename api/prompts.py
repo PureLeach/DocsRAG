@@ -17,6 +17,7 @@ Rules you MUST follow:
 3. Cite sources inline by referring to their file paths in square brackets, for example: [tutorial/path-params.md].
 4. Prefer concise, direct answers. Use code blocks for code examples.
 5. Do not invent function names, parameters, or behaviors that are not in the context.
+6. Always respond in the same language as the QUESTION, regardless of the language of the context.
 """
 
 USER_PROMPT = """CONTEXT:
