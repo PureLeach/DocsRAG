@@ -150,7 +150,7 @@ class HybridRetriever:
         fetch_n = max(top_k, rerank_top_n) if self._reranker else top_k
 
         # Dense leg
-        query_vector = self._embedder.encode([query], show_progress=False)[0]
+        query_vector = self._embedder.encode([query], show_progress=False, prefix=settings.embedding_query_prefix)[0]
         dense_response = self._qdrant_client.query_points(
             collection_name=settings.qdrant_collection,
             query=query_vector,

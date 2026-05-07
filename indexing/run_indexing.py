@@ -94,7 +94,7 @@ def main() -> int:
     embedder = EmbeddingModel(args.embedding_model)
     texts = [c.text for c in chunks]
     logger.info(f"Encoding {len(texts)} chunks...")
-    embeddings = embedder.encode(texts, show_progress=True)
+    embeddings = embedder.encode(texts, show_progress=True, prefix=settings.embedding_passage_prefix)
 
     # 4. Store
     store = QdrantStore(

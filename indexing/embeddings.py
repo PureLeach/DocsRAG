@@ -1,7 +1,8 @@
 """Sentence-transformer embeddings wrapper.
 
-Uses BAAI/bge-small-en-v1.5 — small (~130MB), fast, and competitive
-on retrieval benchmarks (MTEB).
+Uses intfloat/multilingual-e5-small — 118MB, 384-dim, supports 100+ languages.
+e5 models require task prefixes: pass prefix="query: " at query time and
+prefix="passage: " at indexing time for best retrieval quality.
 
 The model is loaded once and reused. On Apple Silicon, sentence-transformers
 will automatically use MPS (Metal) backend if available.
@@ -39,6 +40,7 @@ class EmbeddingModel:
         texts: Sequence[str],
         batch_size: int = 32,
         show_progress: bool = True,
+        prefix: str = "",
     ) -> list[list[float]]:
         """Encode texts into dense embedding vectors.
 
@@ -47,6 +49,8 @@ class EmbeddingModel:
             batch_size: Number of texts per forward pass. 32 is a good default for
                         small models on M-series Macs.
             show_progress: Show tqdm bar (useful for long indexing jobs).
+            prefix: Optional prefix prepended to each text. Use "query: " at
+                    retrieval time and "passage: " at indexing time for e5 models.
 
         Returns:
             List of embedding vectors (each is a list of floats).
@@ -54,8 +58,9 @@ class EmbeddingModel:
         if not texts:
             return []
 
+        prefixed = [prefix + t for t in texts] if prefix else list(texts)
         embeddings = self._model.encode(
-            list(texts),
+            prefixed,
             batch_size=batch_size,
             show_progress_bar=show_progress,
             convert_to_numpy=True,

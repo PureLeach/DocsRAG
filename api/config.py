@@ -38,9 +38,13 @@ class Settings(BaseSettings):
     vllm_base_url: str = "http://localhost:8001/v1"
     vllm_model: str = "mlx-community/Qwen2.5-7B-Instruct-4bit"
 
-    # Embeddings 
-    embedding_model: str = "BAAI/bge-small-en-v1.5"
-    embedding_dim: int = 384  # bge-small-en-v1.5 produces 384-dim vectors
+    # Embeddings
+    embedding_model: str = "intfloat/multilingual-e5-small"
+    embedding_dim: int = 384  # multilingual-e5-small produces 384-dim vectors
+    # e5 models require task prefixes: "query: " at retrieval time, "passage: " at indexing time.
+    # Set both to "" to disable (e.g. when using bge-small-en-v1.5).
+    embedding_query_prefix: str = "query: "
+    embedding_passage_prefix: str = "passage: "
 
     # Indexing defaults (best config from Task 4 sweep)
     chunk_size: int = 1024
