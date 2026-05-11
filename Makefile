@@ -1,7 +1,7 @@
 .PHONY: help install up down logs ollama-status \
         lint format type-check test \
         fetch-docs index reindex smoke \
-        build rebuild api-logs api-shell health ask warmup \
+        build rebuild restart-api api-logs api-shell health ask warmup \
         eval mlflow-ui prometheus-ui grafana-ui \
         vllm-start vllm-status clean
 
@@ -19,6 +19,7 @@ help:
 	@echo "    make down          - Stop Docker services"
 	@echo "    make build         - Build the API Docker image"
 	@echo "    make rebuild       - Rebuild the API image without cache and restart"
+	@echo "    make restart-api       - Force-recreate the API container (picks up .env changes)"
 	@echo "    make logs          - Tail logs of all services"
 	@echo "    make api-logs      - Tail logs of the API service only"
 	@echo "    make api-shell     - Open a shell inside the running API container"
@@ -71,6 +72,9 @@ build:
 rebuild:
 	docker compose build --no-cache api
 	docker compose up -d api
+
+restart-api:
+	docker compose up -d --force-recreate api
 
 logs:
 	docker compose logs -f
