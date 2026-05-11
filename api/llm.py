@@ -22,7 +22,6 @@ def make_llm(temperature: float = 0.0, json_mode: bool = False) -> BaseChatModel
             base_url=settings.vllm_base_url,
             api_key="EMPTY",  # vLLM ignores the key but langchain requires it
             temperature=temperature,
-            max_tokens=1024,
             model_kwargs={"response_format": {"type": "json_object"}} if json_mode else {},
         )
 
