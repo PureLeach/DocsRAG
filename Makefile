@@ -12,7 +12,7 @@ endif
         fetch-docs index reindex smoke \
         build rebuild restart api-logs api-shell health ask warmup \
         eval mlflow-ui prometheus-ui grafana-ui \
-        vllm-start vllm-status clean
+        install-vllm vllm-start vllm-status clean
 
 # Default question for `make ask` if Q is not provided
 Q ?= How do I define a path parameter in FastAPI?
@@ -33,6 +33,7 @@ help:
 	@echo "    make api-logs      - Tail logs of the API service only"
 	@echo "    make api-shell     - Open a shell inside the running API container"
 	@echo "    make ollama-status - Check Ollama status (native install)"
+	@echo "    make install-vllm  - Install vllm + vllm-metal plugin into .venv (macOS arm64 only)"
 	@echo "    make vllm-start    - Start vllm-metal server (VLLM_MODEL / VLLM_PORT overridable)"
 	@echo "    make vllm-status   - Check vllm-metal status"
 	@echo ""
@@ -101,8 +102,33 @@ api-shell:
 ollama-status:
 	@curl -sf http://localhost:11434/api/tags > /dev/null && echo "✓ Ollama API responding" || echo "✗ Ollama API not responding — start the Ollama app or run 'ollama serve'"
 
-VLLM_MODEL ?= mlx-community/Qwen2.5-7B-Instruct-4bit
-VLLM_PORT  ?= 8001
+VLLM_MODEL       ?= mlx-community/Qwen2.5-7B-Instruct-4bit
+VLLM_PORT        ?= 8001
+# Pinned for `make install-vllm`. Bump explicitly when upgrading.
+VLLM_VERSION     ?= 0.20.1
+VLLM_METAL_WHEEL ?= https://github.com/vllm-project/vllm-metal/releases/download/v0.2.0-20260509-055449/vllm_metal-0.2.0-cp312-cp312-macosx_11_0_arm64.whl
+
+# vllm + vllm-metal can't live in pyproject.toml / uv.lock: vllm's own pyproject
+# hard-pins CUDA-only deps (nvidia-cudnn-frontend, cuda-python, flashinfer...)
+# with no macOS wheels, so the install is two-phase — CPU requirements first
+# (substituting compatible versions), then vllm itself. uv's universal resolver
+# has no way to express that. CXXFLAGS works around a clang/parentheses warning
+# upgraded to error on macOS. Confirmed experimentally on branch `try-uv`.
+install-vllm:
+	@uname -sm | grep -q "Darwin arm64" || { echo "✗ macOS arm64 only"; exit 1; }
+	@test -n "$$VIRTUAL_ENV" || { echo "✗ Activate project venv first: source .venv/bin/activate"; exit 1; }
+	@echo "→ Downloading vllm $(VLLM_VERSION) source..."
+	curl -sL -o /tmp/vllm-$(VLLM_VERSION).tar.gz https://github.com/vllm-project/vllm/releases/download/v$(VLLM_VERSION)/vllm-$(VLLM_VERSION).tar.gz
+	tar xf /tmp/vllm-$(VLLM_VERSION).tar.gz -C /tmp
+	@echo "→ Installing vllm CPU requirements..."
+	uv pip install -r /tmp/vllm-$(VLLM_VERSION)/requirements/cpu.txt --index-strategy unsafe-best-match
+	@echo "→ Building vllm core..."
+	cd /tmp/vllm-$(VLLM_VERSION) && CXXFLAGS="-Wno-parentheses" uv pip install .
+	rm -rf /tmp/vllm-$(VLLM_VERSION) /tmp/vllm-$(VLLM_VERSION).tar.gz
+	@echo "→ Installing vllm-metal plugin..."
+	uv pip install "$(VLLM_METAL_WHEEL)"
+	@echo "→ Verifying — should print 'Platform plugin metal is activated':"
+	vllm --version
 
 # vllm-metal 0.2.0+ is a plugin to upstream vllm — the CLI is `vllm serve`,
 # not `vllm-metal --model ...`. The plugin registers itself via entry_points
