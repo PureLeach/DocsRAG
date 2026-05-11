@@ -172,43 +172,30 @@ Get keys at: [cloud.langfuse.com](https://cloud.langfuse.com) → project → Se
 
 ### Step 8 — vllm-metal backend (optional, Apple Silicon only)
 
-Faster inference via MLX (3.8× faster than Ollama). Since `vllm-metal` 0.2.0 the plugin requires the upstream `vllm` package — both are installed into the project venv (none of this is in `pyproject.toml` / `uv.lock` because the build needs a custom compiler flag, and we don't want to break non-Mac users).
+Faster inference via MLX (3.8× faster than Ollama on M4 Max). `vllm-metal` 0.2.0 is a plugin to upstream `vllm`, so both packages must be installed into the project venv via `make install-vllm`. They're not in `pyproject.toml` / `uv.lock`: vllm's own pyproject hard-pins CUDA-only deps (`nvidia-cudnn-frontend`, `cuda-python`, `flashinfer-python`...) that have no macOS wheels, and the manual two-phase install (CPU requirements → main build) can't be expressed in uv's universal resolver — verified experimentally.
 
 ```bash
-# Activate the project venv (subsequent `uv pip install` targets it)
+# 1. Install vllm core + vllm-metal plugin into .venv (~5-15 min; builds vllm from source)
 source .venv/bin/activate
+make install-vllm
 
-# 1. Build vllm core 0.20.1 from source (the CXXFLAGS bit avoids a clang error on macOS)
-cd /tmp
-curl -OL https://github.com/vllm-project/vllm/releases/download/v0.20.1/vllm-0.20.1.tar.gz
-tar xf vllm-0.20.1.tar.gz
-cd vllm-0.20.1
-uv pip install -r requirements/cpu.txt --index-strategy unsafe-best-match
-CXXFLAGS="-Wno-parentheses" uv pip install .
-cd /tmp && rm -rf vllm-0.20.1*
-cd -
-
-# 2. Install the metal plugin (registers as a vllm platform backend at startup)
-uv pip install "https://github.com/vllm-project/vllm-metal/releases/download/v0.2.0-20260509-055449/vllm_metal-0.2.0-cp312-cp312-macosx_11_0_arm64.whl"
-
-# 3. Verify — must print "Platform plugin metal is activated"
-vllm --version
-
-# 4. Start the server (default model: Qwen2.5-7B-Instruct-4bit; override via VLLM_MODEL in .env)
+# 2. Start the server (default model: Qwen2.5-7B-Instruct-4bit; override via VLLM_MODEL in .env)
 make vllm-start
 
-# 5. Check status
+# 3. Check status
 make vllm-status
 
-# 6. Switch the API to vllm
+# 4. Switch the API to vllm
 echo "INFERENCE_BACKEND=vllm" >> .env
 make restart
 
-# 7. Verify with a request
+# 5. Verify with a request
 make ask Q='What is FastAPI?'
 ```
 
-**Caveat:** installing `vllm` pulls a large dependency tree (torch, transformers, kernels) and overrides versions of packages also used by the RAG pipeline. After install run `make health` to confirm the API still starts. If you ever run `uv pip sync uv.lock`, vllm + metal will be removed — re-run the steps above.
+Versions are pinned via `VLLM_VERSION` / `VLLM_METAL_WHEEL` variables at the top of the `Makefile` — bump them explicitly when upgrading.
+
+**Caveat:** installing `vllm` pulls a large dependency tree (torch, transformers, kernels) and overrides versions of packages also used by the RAG pipeline. After install run `make health` to confirm the API still starts. If you ever run `uv pip sync uv.lock`, vllm + metal will be removed — just re-run `make install-vllm`.
 
 ### Step 9 — Run evaluation (optional, ~15 min)
 
