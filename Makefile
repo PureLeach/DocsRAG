@@ -1,7 +1,16 @@
+# Load .env if present so `make` targets honour the same config as
+# docker-compose and the Python app. Make doesn't read .env on its own —
+# without this block, $(VLLM_MODEL) etc. fall back to the `?=` defaults
+# below even when .env sets them. `export` propagates the vars to recipes.
+ifneq (,$(wildcard .env))
+    include .env
+    export
+endif
+
 .PHONY: help install up down logs ollama-status \
         lint format type-check test \
         fetch-docs index reindex smoke \
-        build rebuild restart-api api-logs api-shell health ask warmup \
+        build rebuild restart api-logs api-shell health ask warmup \
         eval mlflow-ui prometheus-ui grafana-ui \
         vllm-start vllm-status clean
 
@@ -18,8 +27,8 @@ help:
 	@echo "    make up            - Start all Docker services (Qdrant + API) and check Ollama"
 	@echo "    make down          - Stop Docker services"
 	@echo "    make build         - Build the API Docker image"
-	@echo "    make rebuild       - Rebuild the API image without cache and restart"
-	@echo "    make restart-api       - Force-recreate the API container (picks up .env changes)"
+	@echo "    make rebuild       - Rebuild the API image without cache and restart (use after pyproject/Dockerfile changes)"
+	@echo "    make restart       - Recreate the API container (picks up code edits via bind mount AND .env/compose changes)"
 	@echo "    make logs          - Tail logs of all services"
 	@echo "    make api-logs      - Tail logs of the API service only"
 	@echo "    make api-shell     - Open a shell inside the running API container"
@@ -73,7 +82,11 @@ rebuild:
 	docker compose build --no-cache api
 	docker compose up -d api
 
-restart-api:
+# Apply code edits and/or .env changes without rebuilding the image.
+# Source is bind-mounted in docker-compose.yml, so the new container picks up
+# the latest files. `--force-recreate` also re-reads environment variables.
+# Use `make rebuild` only when pyproject.toml/uv.lock or the Dockerfile changed.
+restart:
 	docker compose up -d --force-recreate api
 
 logs:
@@ -91,8 +104,11 @@ ollama-status:
 VLLM_MODEL ?= mlx-community/Qwen2.5-7B-Instruct-4bit
 VLLM_PORT  ?= 8001
 
+# vllm-metal 0.2.0+ is a plugin to upstream vllm — the CLI is `vllm serve`,
+# not `vllm-metal --model ...`. The plugin registers itself via entry_points
+# and prints "Platform plugin metal is activated" on startup.
 vllm-start:
-	vllm-metal --model $(VLLM_MODEL) --host 127.0.0.1 --port $(VLLM_PORT)
+	vllm serve $(VLLM_MODEL) --host 127.0.0.1 --port $(VLLM_PORT)
 
 vllm-status:
 	@curl -sf http://127.0.0.1:$(VLLM_PORT)/v1/models > /dev/null && echo "✓ vllm-metal responding on port $(VLLM_PORT)" || echo "✗ vllm-metal not running — run 'make vllm-start'"
