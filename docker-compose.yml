@@ -79,6 +79,13 @@ services:
       # Persist HuggingFace model cache so we don't redownload bge-small
       # on every container rebuild.
       - hf_cache:/app/.cache/huggingface
+      # Bind-mount source so code edits apply via `make restart` (no rebuild).
+      # Read-only — container doesn't write into these. PYTHONDONTWRITEBYTECODE=1
+      # in the Dockerfile keeps Python from trying to write .pyc files.
+      # NB: bind mounts override the COPY'd code from the image; if you ever
+      # want to test the image as-built, remove these two lines.
+      - ./api:/app/api:ro
+      - ./indexing:/app/indexing:ro
     depends_on:
       qdrant:
         condition: service_healthy
