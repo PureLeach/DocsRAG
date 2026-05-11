@@ -93,6 +93,7 @@ def ask(request: AskRequest, pipeline: PipelineDep) -> AskResponse:
         sources=sources,
         retrieval_ms=timings["retrieval_ms"],
         generation_ms=timings["generation_ms"],
+        translation_ms=timings.get("translation_ms", 0),
         total_ms=timings["total_ms"],
     )
 
@@ -125,5 +126,6 @@ def agent_ask(request: AskRequest, agent: AgentPipelineDep) -> AgentAskResponse:
         total_ms=timings["total_ms"],
         rewrite_ms=timings.get("rewrite_ms", 0),
         grading_ms=timings.get("grading_ms", 0),
+        translation_ms=timings.get("translation_ms", 0),
         retry_count=timings.get("retry_count", 0),
     )

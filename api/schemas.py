@@ -58,6 +58,10 @@ class AskResponse(BaseModel):
     sources: list[Source]
     retrieval_ms: int = Field(..., description="Retrieval latency in milliseconds")
     generation_ms: int = Field(..., description="LLM generation latency in milliseconds")
+    translation_ms: int = Field(
+        default=0,
+        description="Combined RU→EN + EN→RU translation latency; 0 for English questions",
+    )
     total_ms: int = Field(..., description="End-to-end latency in milliseconds")
 
 
@@ -72,6 +76,10 @@ class AgentAskResponse(BaseModel):
     total_ms: int = Field(..., description="End-to-end latency including rewriting and grading")
     rewrite_ms: int = Field(default=0, description="Query rewriting latency")
     grading_ms: int = Field(default=0, description="Relevance grading latency")
+    translation_ms: int = Field(
+        default=0,
+        description="Combined RU→EN + EN→RU translation latency; 0 for English questions",
+    )
     retry_count: int = Field(default=0, description="Number of retrieval retries performed (0 = no retry needed)")
 
 

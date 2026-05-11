@@ -142,28 +142,56 @@ class RAGPipeline:
         include_contexts: bool,
         rerank_top_n: int = 20,
     ) -> tuple[str, list[Source], dict[str, int]]:
-        """Full pipeline: retrieve → generate. Returns answer, sources, timings."""
+        """Full pipeline: optionally translate RU→EN → retrieve → generate → optionally translate EN→RU."""
         from api.tracing import get_langfuse_handler
+        from api.translation import (
+            contains_cyrillic,
+            translate_to_english,
+            translate_to_russian,
+        )
+
         handler = get_langfuse_handler(question)
         callbacks = [handler] if handler else None
 
+        is_russian = contains_cyrillic(question)
+        translation_ms = 0
+        t_start = time.perf_counter()
+
+        if is_russian:
+            t_tr0 = time.perf_counter()
+            retrieval_question = translate_to_english(self._llm, question, callbacks=callbacks)
+            translation_ms += int((time.perf_counter() - t_tr0) * 1000)
+            logger.debug("RU→EN | {!r} → {!r}", question[:80], retrieval_question[:80])
+        else:
+            retrieval_question = question
+
         t0 = time.perf_counter()
-        hits = self.retrieve(question, top_k=top_k, rerank_top_n=rerank_top_n)
+        hits = self.retrieve(retrieval_question, top_k=top_k, rerank_top_n=rerank_top_n)
         t1 = time.perf_counter()
-        answer = self.generate(question, hits, callbacks=callbacks)
+        answer = self.generate(retrieval_question, hits, callbacks=callbacks)
         t2 = time.perf_counter()
+
+        if is_russian:
+            t_tr1 = time.perf_counter()
+            answer = translate_to_russian(self._llm, answer, callbacks=callbacks)
+            translation_ms += int((time.perf_counter() - t_tr1) * 1000)
+
+        t_end = time.perf_counter()
 
         sources = [self._hit_to_source(h, include_contexts) for h in hits]
         timings = {
             "retrieval_ms": int((t1 - t0) * 1000),
             "generation_ms": int((t2 - t1) * 1000),
-            "total_ms": int((t2 - t0) * 1000),
+            "translation_ms": translation_ms,
+            "total_ms": int((t_end - t_start) * 1000),
         }
         logger.info(
-            "ask | strategy={} retrieval={}ms generation={}ms total={}ms | hits={} | q={!r}",
+            "ask | strategy={} lang={} retrieval={}ms generation={}ms translation={}ms total={}ms | hits={} | q={!r}",
             self._strategy,
+            "ru" if is_russian else "en",
             timings["retrieval_ms"],
             timings["generation_ms"],
+            timings["translation_ms"],
             timings["total_ms"],
             len(hits),
             question[:80],

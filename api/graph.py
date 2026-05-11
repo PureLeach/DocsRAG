@@ -210,11 +210,32 @@ class AgentPipeline:
         rerank_top_n: int = 20,
     ) -> tuple[str, list["Source"], dict[str, int]]:
         from api.tracing import get_langfuse_handler
+        from api.translation import (
+            contains_cyrillic,
+            translate_to_english,
+            translate_to_russian,
+        )
+
         handler = get_langfuse_handler(question)
+        callbacks = [handler] if handler else []
+
+        is_russian = contains_cyrillic(question)
+        translation_ms = 0
+        t_start = time.perf_counter()
+
+        if is_russian:
+            t_tr0 = time.perf_counter()
+            graph_question = translate_to_english(
+                self._pipeline._llm, question, callbacks=callbacks or None
+            )
+            translation_ms += int((time.perf_counter() - t_tr0) * 1000)
+            logger.debug("RU→EN (agent) | {!r} → {!r}", question[:80], graph_question[:80])
+        else:
+            graph_question = question
 
         initial: GraphState = {
-            "question": question,
-            "query": question,
+            "question": graph_question,
+            "query": graph_question,
             "top_k": top_k,
             "hits": [],
             "relevant_hits": [],
@@ -222,10 +243,18 @@ class AgentPipeline:
             "sources": [],
             "retry_count": 0,
             "timings": {},
-            "callbacks": [handler] if handler else [],
+            "callbacks": callbacks,
         }
 
         result = self._graph.invoke(initial)
+        answer = result["answer"]
+
+        if is_russian:
+            t_tr1 = time.perf_counter()
+            answer = translate_to_russian(
+                self._pipeline._llm, answer, callbacks=callbacks or None
+            )
+            translation_ms += int((time.perf_counter() - t_tr1) * 1000)
 
         # Rebuild sources with the requested include_contexts flag.
         final_hits = result.get("relevant_hits") or result.get("hits", [])
@@ -234,25 +263,31 @@ class AgentPipeline:
             for h in final_hits
         ]
 
+        # Graph's own total_ms only covers in-graph stages; recompute end-to-end
+        # so translation is included when the question was Russian.
+        total_ms = int((time.perf_counter() - t_start) * 1000)
         timings: dict[str, int] = {
             "retrieval_ms": result["timings"].get("retrieval_ms", 0),
             "generation_ms": result["timings"].get("generation_ms", 0),
-            "total_ms": result["timings"].get("total_ms", 0),
+            "translation_ms": translation_ms,
+            "total_ms": total_ms,
             "rewrite_ms": result["timings"].get("rewrite_ms", 0),
             "grading_ms": result["timings"].get("grading_ms", 0),
         }
 
         logger.info(
-            "AgentPipeline.ask | retries={} rewrite={}ms retrieval={}ms grading={}ms generation={}ms total={}ms",
+            "AgentPipeline.ask | lang={} retries={} rewrite={}ms retrieval={}ms grading={}ms generation={}ms translation={}ms total={}ms",
+            "ru" if is_russian else "en",
             result.get("retry_count", 0) - 1,  # subtract last increment
             timings["rewrite_ms"],
             timings["retrieval_ms"],
             timings["grading_ms"],
             timings["generation_ms"],
+            timings["translation_ms"],
             timings["total_ms"],
         )
 
-        return result["answer"], sources, timings
+        return answer, sources, timings
 
 
 @lru_cache(maxsize=1)
