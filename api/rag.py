@@ -161,20 +161,22 @@ class RAGPipeline:
             t_tr0 = time.perf_counter()
             retrieval_question = translate_to_english(self._llm, question, callbacks=callbacks)
             translation_ms += int((time.perf_counter() - t_tr0) * 1000)
-            logger.debug("RU→EN | {!r} → {!r}", question[:80], retrieval_question[:80])
+            logger.info("RU→EN | in={!r} | out={!r}", question, retrieval_question)
         else:
             retrieval_question = question
 
         t0 = time.perf_counter()
         hits = self.retrieve(retrieval_question, top_k=top_k, rerank_top_n=rerank_top_n)
         t1 = time.perf_counter()
-        answer = self.generate(retrieval_question, hits, callbacks=callbacks)
+        answer_en = self.generate(retrieval_question, hits, callbacks=callbacks)
         t2 = time.perf_counter()
+        answer = answer_en
 
         if is_russian:
             t_tr1 = time.perf_counter()
-            answer = translate_to_russian(self._llm, answer, callbacks=callbacks)
+            answer = translate_to_russian(self._llm, answer_en, callbacks=callbacks)
             translation_ms += int((time.perf_counter() - t_tr1) * 1000)
+            logger.info("EN→RU | in={!r} | out={!r}", answer_en, answer)
 
         t_end = time.perf_counter()
 

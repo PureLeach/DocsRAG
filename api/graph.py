@@ -229,7 +229,7 @@ class AgentPipeline:
                 self._pipeline._llm, question, callbacks=callbacks or None
             )
             translation_ms += int((time.perf_counter() - t_tr0) * 1000)
-            logger.debug("RU→EN (agent) | {!r} → {!r}", question[:80], graph_question[:80])
+            logger.info("RU→EN (agent) | in={!r} | out={!r}", question, graph_question)
         else:
             graph_question = question
 
@@ -247,14 +247,16 @@ class AgentPipeline:
         }
 
         result = self._graph.invoke(initial)
-        answer = result["answer"]
+        answer_en = result["answer"]
+        answer = answer_en
 
         if is_russian:
             t_tr1 = time.perf_counter()
             answer = translate_to_russian(
-                self._pipeline._llm, answer, callbacks=callbacks or None
+                self._pipeline._llm, answer_en, callbacks=callbacks or None
             )
             translation_ms += int((time.perf_counter() - t_tr1) * 1000)
+            logger.info("EN→RU (agent) | in={!r} | out={!r}", answer_en, answer)
 
         # Rebuild sources with the requested include_contexts flag.
         final_hits = result.get("relevant_hits") or result.get("hits", [])
