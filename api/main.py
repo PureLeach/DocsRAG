@@ -64,7 +64,9 @@ def health(pipeline: PipelineDep) -> HealthResponse:
         qdrant_collection=settings.qdrant_collection,
         qdrant_points=points,
         ollama_model=settings.ollama_model,
+        vllm_model=settings.vllm_model,
         embedding_model=settings.embedding_model,
+        inference_backend=settings.inference_backend,
     )
 
 

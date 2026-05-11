@@ -90,4 +90,6 @@ class HealthResponse(BaseModel):
     qdrant_collection: str
     qdrant_points: int
     ollama_model: str
+    vllm_model: str
     embedding_model: str
+    inference_backend: str
