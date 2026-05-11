@@ -9,6 +9,7 @@ End-to-end production-grade RAG system over FastAPI documentation (153 markdown 
 - **Evaluation-driven design.** Every retrieval/generation decision is backed by Ragas metrics on a 25-question golden dataset, tracked in MLflow.
 - **Honest negative results.** Tested hybrid search and agentic RAG; both lost to plain dense retrieval on this corpus and the README explains why.
 - **Switchable inference.** Same API code runs against Ollama (dev) or vLLM (prod) via a single env variable. Benchmark on M4 Max: vllm-metal **3.8× faster** than Ollama.
+- **Cross-language Q&A.** Ask in Russian, get Russian answers — implemented as a thin RU↔EN translation wrapper over the English-only pipeline. No reindex required.
 - **Full observability stack.** Prometheus + Grafana for system metrics, LangFuse for LLM tracing — both fully optional and additive.
 
 ## Key Findings
@@ -171,24 +172,43 @@ Get keys at: [cloud.langfuse.com](https://cloud.langfuse.com) → project → Se
 
 ### Step 8 — vllm-metal backend (optional, Apple Silicon only)
 
-Faster inference via MLX (3.8× faster than Ollama):
+Faster inference via MLX (3.8× faster than Ollama). Since `vllm-metal` 0.2.0 the plugin requires the upstream `vllm` package — both are installed into the project venv (none of this is in `pyproject.toml` / `uv.lock` because the build needs a custom compiler flag, and we don't want to break non-Mac users).
 
 ```bash
-# Install (local .venv only — do NOT add to pyproject.toml)
-uv pip install vllm-metal
+# Activate the project venv (subsequent `uv pip install` targets it)
+source .venv/bin/activate
 
-# Start the server
+# 1. Build vllm core 0.20.1 from source (the CXXFLAGS bit avoids a clang error on macOS)
+cd /tmp
+curl -OL https://github.com/vllm-project/vllm/releases/download/v0.20.1/vllm-0.20.1.tar.gz
+tar xf vllm-0.20.1.tar.gz
+cd vllm-0.20.1
+uv pip install -r requirements/cpu.txt --index-strategy unsafe-best-match
+CXXFLAGS="-Wno-parentheses" uv pip install .
+cd /tmp && rm -rf vllm-0.20.1*
+cd -
+
+# 2. Install the metal plugin (registers as a vllm platform backend at startup)
+uv pip install "https://github.com/vllm-project/vllm-metal/releases/download/v0.2.0-20260509-055449/vllm_metal-0.2.0-cp312-cp312-macosx_11_0_arm64.whl"
+
+# 3. Verify — must print "Platform plugin metal is activated"
+vllm --version
+
+# 4. Start the server (default model: Qwen2.5-7B-Instruct-4bit; override via VLLM_MODEL in .env)
 make vllm-start
 
-# Check status
+# 5. Check status
 make vllm-status
 
-# Switch the API to vllm
+# 6. Switch the API to vllm
 echo "INFERENCE_BACKEND=vllm" >> .env
+make restart
 
-# Verify with a request
+# 7. Verify with a request
 make ask Q='What is FastAPI?'
 ```
+
+**Caveat:** installing `vllm` pulls a large dependency tree (torch, transformers, kernels) and overrides versions of packages also used by the RAG pipeline. After install run `make health` to confirm the API still starts. If you ever run `uv pip sync uv.lock`, vllm + metal will be removed — re-run the steps above.
 
 ### Step 9 — Run evaluation (optional, ~15 min)
 
@@ -226,11 +246,25 @@ Parameters:
 | `top_k` | int | 5 | Number of chunks to retrieve |
 | `include_contexts` | bool | false | Include raw chunk text in response |
 
-Response includes `answer`, `sources` (with `source_path`, `header_path`, `score`), and timing breakdown (`retrieval_ms`, `generation_ms`, `total_ms`).
+Response includes `answer`, `sources` (with `source_path`, `header_path`, `score`), and timing breakdown (`retrieval_ms`, `generation_ms`, `translation_ms`, `total_ms`).
 
 ### `POST /agent/ask`
 
 Routes the question through the LangGraph agent (query rewriting + relevance grading + conditional retry). Same request/response shape as `/ask`. Use when precision matters more than recall (see Task 6 results below).
+
+### Cross-language support
+
+The same endpoints (`/ask` and `/agent/ask`) accept questions in **Russian** without any flag or extra parameter. The pipeline detects Cyrillic in the question, translates it to English for retrieval and generation, then translates the answer back to Russian before returning it.
+
+```bash
+make ask Q='Как определить path-параметр в FastAPI?'
+```
+
+Response shape is unchanged; `translation_ms` reports the combined RU→EN + EN→RU latency (`0` for English questions). File-path citations like `[tutorial/path-params.md]` and code blocks are preserved verbatim. Translation steps log at INFO level (`make api-logs` shows `RU→EN | in=... | out=...`).
+
+**Backend choice matters for Russian.** On `INFERENCE_BACKEND=vllm` with the default `Qwen2.5-7B-Instruct-4bit` (MLX), the EN→RU step produces garbled Cyrillic — Latin-with-acute artefacts mid-word (e.g. `разdéлвние` instead of `разработки`). Use `Qwen2.5-14B-Instruct-4bit` for clean Russian output (set `VLLM_MODEL` in `.env`). On `INFERENCE_BACKEND=ollama` (default), the GGUF-quantized 7B handles Russian cleanly — no model swap needed. The 4bit MLX quantization of Qwen 2.5 7B has a vocabulary/sampling artefact that the larger 14B model avoids.
+
+**Why translation, not multilingual embeddings?** The index uses `BAAI/bge-small-en-v1.5` (English-only) and was tuned on an English golden dataset (faithfulness 0.882, context_recall 0.557). Swapping to a multilingual embedder (`bge-m3`, `multilingual-e5`) requires a full reindex on a ~2 GB model and would degrade the validated English baseline. Translation is reversible, leaves the index untouched, and reuses the existing multilingual LLM (Qwen 2.5) — at a cost of two extra LLM calls per Russian query (~+1.5 s on Ollama 7B, ~+8 s on vllm-metal 7B, ~+13 s on vllm-metal 14B).
 
 ## Evaluation
 
@@ -345,11 +379,11 @@ Context metrics are identical (same retrieval). Minor faithfulness/relevancy gap
 
 To reproduce:
 ```bash
-# 1. Install vllm-metal (macOS ARM64 only — do NOT add to pyproject.toml)
-uv pip install vllm-metal
+# 1. Install vllm-metal (macOS ARM64 only — see Step 8 in Quick Start for the
+#    full install (vllm core 0.20.1 from source + plugin wheel))
 
-# 2. Start vllm-metal server
-vllm-metal --model mlx-community/Qwen2.5-7B-Instruct-4bit --host 127.0.0.1 --port 8001
+# 2. Start the vllm server (plugin auto-registers as a vllm platform backend)
+vllm serve mlx-community/Qwen2.5-7B-Instruct-4bit --host 127.0.0.1 --port 8001
 
 # 3. Verify the server is up
 curl http://127.0.0.1:8001/v1/models
@@ -432,9 +466,10 @@ docsrag/
 │   ├── retriever.py  # HybridRetriever: BM25Index + RRF + CrossEncoder (Task 5)
 │   ├── graph.py      # Agentic RAG graph via LangGraph (Task 6)
 │   ├── llm.py        # LLM factory: ChatOllama or ChatOpenAI→vLLM (Task 8)
+│   ├── translation.py # RU↔EN wrapper — routes Russian questions through translation
 │   ├── metrics.py    # Prometheus custom metrics (Task 7)
 │   ├── tracing.py    # LangFuse callback helper (Task 7)
-│   ├── prompts.py    # System + user prompt templates
+│   ├── prompts.py    # System + user + translation prompts
 │   ├── schemas.py    # Pydantic request/response models
 │   └── config.py     # Pydantic Settings
 ├── indexing/         # Indexing pipeline (Task 2)
@@ -468,6 +503,7 @@ docsrag/
 - **Generation:** `temperature=0.0` for determinism; answers cite sources as `[file.md]`
 - **Inference backend:** `INFERENCE_BACKEND=ollama` (default) or `vllm` — switchable via `.env`
 - **Observability:** LangFuse tracing, Prometheus `/metrics`, Grafana dashboard at `:3000`
+- **Languages:** English (native), Russian (via RU↔EN translation wrapper; English path untouched)
 
 ## Makefile Reference
 
