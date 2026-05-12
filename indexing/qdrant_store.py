@@ -36,10 +36,7 @@ class QdrantStore:
                 distance=Distance.COSINE,
             ),
         )
-        logger.info(
-            f"Created collection '{self.collection_name}' "
-            f"(dim={self.vector_dim}, distance=cosine)"
-        )
+        logger.info(f"Created collection '{self.collection_name}' (dim={self.vector_dim}, distance=cosine)")
 
     def upsert_chunks(
         self,
@@ -55,9 +52,7 @@ class QdrantStore:
             batch_size: Number of points per upsert request.
         """
         if len(chunks) != len(embeddings):
-            raise ValueError(
-                f"chunks ({len(chunks)}) and embeddings ({len(embeddings)}) length mismatch"
-            )
+            raise ValueError(f"chunks ({len(chunks)}) and embeddings ({len(embeddings)}) length mismatch")
 
         points = [
             PointStruct(

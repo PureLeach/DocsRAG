@@ -37,6 +37,7 @@ GOLDEN_DATASET_PATH = Path(__file__).parent / "golden_dataset.json"
 
 # data
 
+
 def load_dataset(path: Path) -> list[dict[str, str]]:
     with path.open() as f:
         data = json.load(f)
@@ -46,10 +47,12 @@ def load_dataset(path: Path) -> list[dict[str, str]]:
 
 # pipeline
 
+
 def build_pipeline(config: dict[str, Any]):
     strategy = config.get("retrieval_strategy", "dense")
     if strategy == "agentic":
         from api.graph import AgentPipeline
+
         base = RAGPipeline(retrieval_strategy="dense")
         return AgentPipeline(base)
     return RAGPipeline(retrieval_strategy=strategy)
@@ -96,6 +99,7 @@ def run_pipeline(
 
 
 # metrics
+
 
 def build_ragas_llm(config: dict[str, Any]) -> LangchainLLMWrapper:
     llm = ChatOllama(
@@ -152,6 +156,7 @@ def compute_metrics(
 
 # mlflow
 
+
 def log_to_mlflow(
     config: dict[str, Any],
     scores: dict[str, float],
@@ -162,28 +167,28 @@ def log_to_mlflow(
     mlflow.set_experiment(EXPERIMENT_NAME)
 
     with mlflow.start_run() as run:
-        mlflow.log_params({
-            "chunk_size": config["chunk_size"],
-            "chunk_overlap": config["chunk_overlap"],
-            "top_k": config["top_k"],
-            "embedding_model": config["embedding_model"],
-            "llm_model": config["llm_model"],
-            "prompt_version": config["prompt_version"],
-            "retrieval_strategy": config.get("retrieval_strategy", "dense"),
-            "rerank_top_n": config.get("rerank_top_n", 20),
-            "n_samples": n_samples,
-            "config_file": Path(config_path).name,
-        })
-        mlflow.log_metrics(scores)
-        run_url = (
-            f"{MLFLOW_TRACKING_URI}/#/experiments/"
-            f"{run.info.experiment_id}/runs/{run.info.run_id}"
+        mlflow.log_params(
+            {
+                "chunk_size": config["chunk_size"],
+                "chunk_overlap": config["chunk_overlap"],
+                "top_k": config["top_k"],
+                "embedding_model": config["embedding_model"],
+                "llm_model": config["llm_model"],
+                "prompt_version": config["prompt_version"],
+                "retrieval_strategy": config.get("retrieval_strategy", "dense"),
+                "rerank_top_n": config.get("rerank_top_n", 20),
+                "n_samples": n_samples,
+                "config_file": Path(config_path).name,
+            }
         )
+        mlflow.log_metrics(scores)
+        run_url = f"{MLFLOW_TRACKING_URI}/#/experiments/{run.info.experiment_id}/runs/{run.info.run_id}"
 
     return run_url
 
 
 # entrypoint
+
 
 def main() -> None:
     import time

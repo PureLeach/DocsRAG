@@ -5,19 +5,21 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from loguru import logger
 from qdrant_client import QdrantClient
-from qdrant_client.models import ScoredPoint
 
 from api.config import settings
 from api.llm import make_llm
 from api.prompts import PROMPT
 from api.schemas import Source
 from indexing.embeddings import EmbeddingModel
+
+if TYPE_CHECKING:
+    from qdrant_client.models import ScoredPoint
 
 RetrievalStrategy = Literal["dense", "hybrid", "hybrid_rerank"]
 
@@ -204,9 +206,7 @@ class RAGPipeline:
 
     def collection_points_count(self) -> int:
         """Number of points in the Qdrant collection (used by /health)."""
-        info = self._qdrant_client.count(
-            collection_name=settings.qdrant_collection, exact=True
-        )
+        info = self._qdrant_client.count(collection_name=settings.qdrant_collection, exact=True)
         return int(info.count)
 
     # internals
@@ -222,9 +222,7 @@ class RAGPipeline:
             source_path = md.get("source_path", "unknown")
             header_path = md.get("header_path", "")
             header_line = f" — {header_path}" if header_path else ""
-            blocks.append(
-                f"[{i}] {source_path}{header_line}\n{hit.document.page_content}"
-            )
+            blocks.append(f"[{i}] {source_path}{header_line}\n{hit.document.page_content}")
         return "\n\n---\n\n".join(blocks)
 
     @staticmethod

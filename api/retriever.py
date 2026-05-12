@@ -16,7 +16,6 @@ from api.config import settings
 
 if TYPE_CHECKING:
     from qdrant_client import QdrantClient
-    from qdrant_client.models import ScoredPoint
 
     from api.rag import RetrievalHit
     from indexing.embeddings import EmbeddingModel
@@ -49,7 +48,7 @@ class BM25Index:
         return [(self._docs[i], float(scores[i])) for i in top_indices]
 
     @classmethod
-    def build_from_qdrant(cls, client: "QdrantClient", collection: str) -> "BM25Index":
+    def build_from_qdrant(cls, client: QdrantClient, collection: str) -> BM25Index:
         """Scroll all points from Qdrant and build the index."""
         logger.info("Building BM25 index from Qdrant collection '{}'...", collection)
         docs: list[Document] = []
@@ -65,14 +64,16 @@ class BM25Index:
             points, next_offset = result
             for point in points:
                 payload = point.payload or {}
-                docs.append(Document(
-                    page_content=str(payload.get("text", "")),
-                    metadata={
-                        "source_path": payload.get("source_path", "unknown"),
-                        "header_path": payload.get("header_path", ""),
-                        "chunk_index": payload.get("chunk_index", -1),
-                    },
-                ))
+                docs.append(
+                    Document(
+                        page_content=str(payload.get("text", "")),
+                        metadata={
+                            "source_path": payload.get("source_path", "unknown"),
+                            "header_path": payload.get("header_path", ""),
+                            "chunk_index": payload.get("chunk_index", -1),
+                        },
+                    )
+                )
             if next_offset is None:
                 break
             offset = next_offset
@@ -86,7 +87,7 @@ class BM25Index:
         logger.info("BM25 index saved to {}", path)
 
     @classmethod
-    def load(cls, path: Path) -> "BM25Index":
+    def load(cls, path: Path) -> BM25Index:
         with path.open("rb") as f:
             index = pickle.load(f)
         logger.info("BM25 index loaded from {} ({} docs)", path, len(index._docs))
@@ -94,11 +95,11 @@ class BM25Index:
 
 
 def _rrf_merge(
-    dense_hits: list["RetrievalHit"],
+    dense_hits: list[RetrievalHit],
     bm25_hits: list[tuple[Document, float]],
     top_k: int,
     k: int = 60,
-) -> list["RetrievalHit"]:
+) -> list[RetrievalHit]:
     """Reciprocal Rank Fusion over dense and sparse result lists.
 
     Uses chunk_index as the document identifier for deduplication.
@@ -129,8 +130,8 @@ class HybridRetriever:
 
     def __init__(
         self,
-        embedder: "EmbeddingModel",
-        qdrant_client: "QdrantClient",
+        embedder: EmbeddingModel,
+        qdrant_client: QdrantClient,
         bm25_index: BM25Index,
         reranker: CrossEncoder | None = None,
     ) -> None:
@@ -144,7 +145,7 @@ class HybridRetriever:
         query: str,
         top_k: int,
         rerank_top_n: int = 20,
-    ) -> list["RetrievalHit"]:
+    ) -> list[RetrievalHit]:
         from api.rag import RetrievalHit, _scored_point_to_hit  # local import
 
         fetch_n = max(top_k, rerank_top_n) if self._reranker else top_k
@@ -170,13 +171,8 @@ class HybridRetriever:
         else:
             pairs: list[tuple[str, str]] = [(query, hit.document.page_content) for hit in merged]
             rerank_scores = self._reranker.predict(pairs)  # type: ignore[arg-type]
-            reranked = sorted(
-                zip(merged, rerank_scores), key=lambda x: x[1], reverse=True
-            )
-            result = [
-                RetrievalHit(document=hit.document, score=float(score))
-                for hit, score in reranked[:top_k]
-            ]
+            reranked = sorted(zip(merged, rerank_scores, strict=False), key=lambda x: x[1], reverse=True)
+            result = [RetrievalHit(document=hit.document, score=float(score)) for hit, score in reranked[:top_k]]
 
         logger.debug(
             "HybridRetriever | dense={} bm25={} merged={} returned={} top_score={:.3f}",
@@ -189,7 +185,7 @@ class HybridRetriever:
         return result
 
 
-def load_or_build_bm25(client: "QdrantClient") -> BM25Index:
+def load_or_build_bm25(client: QdrantClient) -> BM25Index:
     """Load BM25 index from disk; rebuild from Qdrant if missing."""
     if BM25_INDEX_PATH.exists():
         return BM25Index.load(BM25_INDEX_PATH)

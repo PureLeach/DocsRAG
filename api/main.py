@@ -55,7 +55,7 @@ def health(pipeline: PipelineDep) -> HealthResponse:
     """
     try:
         points = pipeline.collection_points_count()
-    except Exception as exc:  # noqa: BLE001 — we want a generic 503 here
+    except Exception as exc:
         logger.error("Health check failed: {}", exc)
         raise HTTPException(status_code=503, detail=f"Qdrant unreachable: {exc}") from exc
 

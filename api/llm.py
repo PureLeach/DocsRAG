@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from langchain_core.language_models.chat_models import BaseChatModel
+from typing import TYPE_CHECKING
 
 from api.config import settings
+
+if TYPE_CHECKING:
+    from langchain_core.language_models.chat_models import BaseChatModel
 
 # Generation budget per call. 1024 fits the longest production answers we've
 # seen from /ask (~600 tokens) with margin. Set explicitly to avoid relying
@@ -39,6 +42,7 @@ def make_llm(temperature: float = 0.0, json_mode: bool = False) -> BaseChatModel
     """
     if settings.inference_backend == "vllm":
         from langchain_openai import ChatOpenAI
+
         return ChatOpenAI(
             model=settings.vllm_model,
             base_url=settings.vllm_base_url,
@@ -52,6 +56,7 @@ def make_llm(temperature: float = 0.0, json_mode: bool = False) -> BaseChatModel
 
     # Default: Ollama
     from langchain_ollama import ChatOllama
+
     return ChatOllama(
         model=settings.ollama_model,
         base_url=settings.ollama_base_url,

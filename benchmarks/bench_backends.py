@@ -83,7 +83,7 @@ def main() -> None:
         gen_times = [r["generation_ms"] for r in results]
         total_times = [r["total_ms"] for r in results]
         for i, (q, r) in enumerate(zip(QUESTIONS, results)):
-            print(f"  [{i+1}] gen={r['generation_ms']}ms  total={r['total_ms']}ms  | {q[:55]}")
+            print(f"  [{i + 1}] gen={r['generation_ms']}ms  total={r['total_ms']}ms  | {q[:55]}")
         print(f"  generation: {stats(gen_times)}")
         print(f"  total:      {stats(total_times)}")
 
@@ -106,7 +106,7 @@ def main() -> None:
         if gen_b > 0:
             ratio = gen_a / gen_b
             faster = labels[1] if ratio > 1 else labels[0]
-            print(f"\n→ {faster} is {max(ratio, 1/ratio):.2f}x faster on generation")
+            print(f"\n→ {faster} is {max(ratio, 1 / ratio):.2f}x faster on generation")
 
     print("=" * 70)
 

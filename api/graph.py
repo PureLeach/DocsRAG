@@ -24,36 +24,36 @@ from typing import TYPE_CHECKING, Any
 for _var in ("ALL_PROXY", "all_proxy", "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):
     os.environ.pop(_var, None)
 
+from typing import TypedDict
+
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, START, StateGraph
 from loguru import logger
-from typing import TypedDict
 
-from api.config import settings
 from api.llm import make_llm
 
 if TYPE_CHECKING:
-    from api.rag import RAGPipeline, RetrievalHit
+    from api.rag import RAGPipeline
     from api.schemas import Source
 
-MAX_RETRIES = 1       # one retry after initial retrieval
+MAX_RETRIES = 1  # one retry after initial retrieval
 MIN_RELEVANT_CHUNKS = 2  # minimum chunks that must pass grading to skip retry
 
 
 class GraphState(TypedDict):
-    question: str         # original user question — never mutated
-    query: str            # current retrieval query (rewritten on retry)
+    question: str  # original user question — never mutated
+    query: str  # current retrieval query (rewritten on retry)
     top_k: int
-    hits: list            # list[RetrievalHit] from retriever
-    relevant_hits: list   # list[RetrievalHit] that passed grading
+    hits: list  # list[RetrievalHit] from retriever
+    relevant_hits: list  # list[RetrievalHit] that passed grading
     answer: str
-    sources: list         # list[Source]
-    retry_count: int      # incremented by relevance_grader each pass
-    timings: dict         # rewrite_ms, retrieval_ms, grading_ms, generation_ms, total_ms
-    callbacks: list       # LangFuse CallbackHandler list, empty when tracing disabled
+    sources: list  # list[Source]
+    retry_count: int  # incremented by relevance_grader each pass
+    timings: dict  # rewrite_ms, retrieval_ms, grading_ms, generation_ms, total_ms
+    callbacks: list  # LangFuse CallbackHandler list, empty when tracing disabled
 
 
-def build_agent_graph(pipeline: "RAGPipeline"):
+def build_agent_graph(pipeline: RAGPipeline):
     """Build and compile the agentic RAG graph around an existing RAGPipeline."""
 
     llm = make_llm(temperature=0.0)
@@ -128,7 +128,9 @@ def build_agent_graph(pipeline: "RAGPipeline"):
         grading_ms = int((time.perf_counter() - t0) * 1000)
         logger.info(
             "relevance_grader | relevant={}/{} grading={}ms",
-            len(relevant_hits), len(hits), grading_ms,
+            len(relevant_hits),
+            len(hits),
+            grading_ms,
         )
 
         timings = dict(state.get("timings") or {})
@@ -156,7 +158,9 @@ def build_agent_graph(pipeline: "RAGPipeline"):
         timings["total_ms"] = sum(timings.values())
         logger.info(
             "generator | generation={}ms total={}ms answer_len={}",
-            generation_ms, timings["total_ms"], len(answer),
+            generation_ms,
+            timings["total_ms"],
+            len(answer),
         )
         return {"answer": answer, "sources": sources, "timings": timings}
 
@@ -167,7 +171,10 @@ def build_agent_graph(pipeline: "RAGPipeline"):
         if len(relevant) < MIN_RELEVANT_CHUNKS and retry_count <= MAX_RETRIES:
             logger.info(
                 "should_retry → retry (relevant={} < {}, retry_count={} ≤ {})",
-                len(relevant), MIN_RELEVANT_CHUNKS, retry_count, MAX_RETRIES,
+                len(relevant),
+                MIN_RELEVANT_CHUNKS,
+                retry_count,
+                MAX_RETRIES,
             )
             return "retry"
         return "generate"
@@ -198,7 +205,7 @@ class AgentPipeline:
     to RAGPipeline without special-casing.
     """
 
-    def __init__(self, pipeline: "RAGPipeline") -> None:
+    def __init__(self, pipeline: RAGPipeline) -> None:
         self._pipeline = pipeline
         self._graph = build_agent_graph(pipeline)
 
@@ -208,7 +215,7 @@ class AgentPipeline:
         top_k: int,
         include_contexts: bool,
         rerank_top_n: int = 20,
-    ) -> tuple[str, list["Source"], dict[str, int]]:
+    ) -> tuple[str, list[Source], dict[str, int]]:
         from api.tracing import get_langfuse_handler
         from api.translation import (
             contains_cyrillic,
@@ -225,9 +232,7 @@ class AgentPipeline:
 
         if is_russian:
             t_tr0 = time.perf_counter()
-            graph_question = translate_to_english(
-                self._pipeline._llm, question, callbacks=callbacks or None
-            )
+            graph_question = translate_to_english(self._pipeline._llm, question, callbacks=callbacks or None)
             translation_ms += int((time.perf_counter() - t_tr0) * 1000)
             logger.info("RU→EN (agent) | in={!r} | out={!r}", question, graph_question)
         else:
@@ -252,18 +257,13 @@ class AgentPipeline:
 
         if is_russian:
             t_tr1 = time.perf_counter()
-            answer = translate_to_russian(
-                self._pipeline._llm, answer_en, callbacks=callbacks or None
-            )
+            answer = translate_to_russian(self._pipeline._llm, answer_en, callbacks=callbacks or None)
             translation_ms += int((time.perf_counter() - t_tr1) * 1000)
             logger.info("EN→RU (agent) | in={!r} | out={!r}", answer_en, answer)
 
         # Rebuild sources with the requested include_contexts flag.
         final_hits = result.get("relevant_hits") or result.get("hits", [])
-        sources = [
-            self._pipeline._hit_to_source(h, include_contexts=include_contexts)
-            for h in final_hits
-        ]
+        sources = [self._pipeline._hit_to_source(h, include_contexts=include_contexts) for h in final_hits]
 
         # Graph's own total_ms only covers in-graph stages; recompute end-to-end
         # so translation is included when the question was Russian.
@@ -296,4 +296,5 @@ class AgentPipeline:
 def get_agent_pipeline() -> AgentPipeline:
     """Application-wide singleton for the agentic pipeline."""
     from api.rag import get_pipeline
+
     return AgentPipeline(get_pipeline())

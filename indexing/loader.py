@@ -33,8 +33,7 @@ def load_markdown_files(docs_root: Path) -> list[RawDocument]:
     """
     if not docs_root.exists():
         raise FileNotFoundError(
-            f"Docs root does not exist: {docs_root}. "
-            f"Run ./indexing/fetch_docs.sh to download documentation."
+            f"Docs root does not exist: {docs_root}. Run ./indexing/fetch_docs.sh to download documentation."
         )
 
     md_files = sorted(docs_root.rglob("*.md"))
@@ -64,8 +63,5 @@ def load_markdown_files(docs_root: Path) -> list[RawDocument]:
             )
         )
 
-    logger.info(
-        f"Loaded {len(documents)} documents "
-        f"({skipped} skipped as empty or non-UTF8)"
-    )
+    logger.info(f"Loaded {len(documents)} documents ({skipped} skipped as empty or non-UTF8)")
     return documents

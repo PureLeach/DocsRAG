@@ -23,6 +23,7 @@ def get_langfuse_handler(question: str = "") -> Any | None:
         return None
     try:
         from langfuse.langchain import CallbackHandler
+
         return CallbackHandler()
     except Exception:
         return None
