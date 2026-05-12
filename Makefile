@@ -8,7 +8,7 @@ ifneq (,$(wildcard .env))
 endif
 
 .PHONY: help install up down logs ollama-status \
-        lint format type-check test \
+        format test \
         fetch-docs index reindex smoke \
         build rebuild restart api-logs api-shell health ask warmup \
         eval mlflow-ui prometheus-ui grafana-ui \
@@ -177,15 +177,8 @@ smoke:
 
 # Quality 
 
-lint:
-	ruff check .
-
 format:
-	ruff check --fix .
-	black .
-
-type-check:
-	mypy api indexing evaluation
+	pre-commit run -a
 
 test:
 	pytest -v
